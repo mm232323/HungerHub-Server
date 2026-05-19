@@ -1,0 +1,24 @@
+import { Router, type IRouter } from "express";
+import healthRouter from "./v1/health";
+import categoriesRouter from "./v1/categories";
+import merchantsRouter from "./v1/merchants";
+import productsRouter from "./v1/products";
+import feedRouter from "./v1/feed";
+import ordersRouter from "./v1/orders";
+import reviewsRouter from "./v1/reviews";
+import searchRouter from "./v1/search";
+import dashboardRouter from "./v1/dashboard";
+
+const router: IRouter = Router();
+const version = `/${process.env.API_VERSION || "v1"}`;
+router.use(version, healthRouter);
+router.use(version, categoriesRouter);
+router.use(version, merchantsRouter);
+router.use(version, productsRouter);
+router.use(version, feedRouter);
+router.use(version, ordersRouter);
+router.use(version, reviewsRouter);
+router.use(version, searchRouter);
+router.use(version, dashboardRouter);
+
+export default router;

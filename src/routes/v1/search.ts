@@ -1,8 +1,7 @@
 import { Router, type IRouter } from "express";
-import { ilike, or } from "drizzle-orm";
-import { db, merchantsTable, productsTable } from "@workspace/db";
-import { SearchResponse, SearchQueryParams } from "@workspace/api-zod";
-import { serializeDates } from "../lib/serialize";
+import { supabase } from "#supabase";
+import { SearchResponse, SearchQueryParams } from "#api-zod";
+import { serializeDates, camelCaseKeys } from "../../utils/serialize";
 
 const router: IRouter = Router();
 
@@ -15,17 +14,31 @@ router.get("/search", async (req, res): Promise<void> => {
 
   const q = query.data.q;
 
-  const [merchants, products] = await Promise.all([
-    db.select().from(merchantsTable).where(
-      or(ilike(merchantsTable.name, `%${q}%`), ilike(merchantsTable.cuisineType, `%${q}%`))
-    ).limit(5),
-    db.select().from(productsTable).where(
-      or(ilike(productsTable.name, `%${q}%`), ilike(productsTable.description, `%${q}%`))
-    ).limit(10),
+  const [merchantsResult, productsResult] = await Promise.all([
+    supabase
+      .from("merchants")
+      .select("*")
+      .or(`name.ilike.%${q}%,cuisine_type.ilike.%${q}%`)
+      .limit(5),
+    supabase
+      .from("products")
+      .select("*")
+      .or(`name.ilike.%${q}%,description.ilike.%${q}%`)
+      .limit(10),
   ]);
 
-  const merchantsWithFollow = merchants.map((m) => ({ ...m, isFollowing: false }));
-  const productsWithMerchant = products.map((p) => ({ ...p, merchantName: null }));
+  if (merchantsResult.error || productsResult.error) {
+    res.status(500).json({
+      error: merchantsResult.error?.message || productsResult.error?.message,
+    });
+    return;
+  }
+
+  const merchants = camelCaseKeys(merchantsResult.data || []);
+  const products = camelCaseKeys(productsResult.data || []);
+
+  const merchantsWithFollow = merchants.map((m: any) => ({ ...m, isFollowing: false }));
+  const productsWithMerchant = products.map((p: any) => ({ ...p, merchantName: null }));
 
   res.json(SearchResponse.parse(serializeDates({ merchants: merchantsWithFollow, products: productsWithMerchant })));
 });

@@ -1,14 +1,13 @@
+import "./load-env";
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
-import { publishableKeyFromHost } from "@clerk/shared/keys";
-import router from "./routes/v1";
+import router from "./routes/index.js";
 import { logger } from "./utils/logger";
 import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
-  getClerkProxyHost,
 } from "./middleware/clerkProxyMiddleware";
 
 const app: Express = express();
@@ -41,10 +40,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(
   clerkMiddleware((req) => ({
-    publishableKey: publishableKeyFromHost(
-      getClerkProxyHost(req) ?? "",
-      process.env.CLERK_PUBLISHABLE_KEY,
-    ),
+    publishableKey: process.env.CLERK_PUBLISHABLE_KEY || ""
   })),
 );
 

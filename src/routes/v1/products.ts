@@ -1,14 +1,13 @@
 import { Router, type IRouter } from "express";
-import { eq, and, ilike } from "drizzle-orm";
-import { serializeDates } from "../lib/serialize";
-import { db, productsTable, merchantsTable } from "@workspace/db";
+import { supabase } from "#supabase";
 import {
   ListProductsResponse,
   GetProductResponse,
   GetTrendingProductsResponse,
   GetProductParams,
   ListProductsQueryParams,
-} from "@workspace/api-zod";
+} from "#api-zod";
+import { serializeDates, camelCaseKeys } from "../../utils/serialize";
 
 const router: IRouter = Router();
 
@@ -20,30 +19,61 @@ router.get("/products", async (req, res): Promise<void> => {
   const limit = query.success && query.data.limit ? Number(query.data.limit) : 20;
   const offset = query.success && query.data.offset ? Number(query.data.offset) : 0;
 
-  const conditions = [];
-  if (category) conditions.push(eq(productsTable.category, category));
-  if (merchantId) conditions.push(eq(productsTable.merchantId, merchantId));
-  if (search) conditions.push(ilike(productsTable.name, `%${search}%`));
+  let queryBuilder = supabase
+    .from("products")
+    .select(`
+      *,
+      merchants (
+        name
+      )
+    `);
 
-  const products = await db
-    .select()
-    .from(productsTable)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .limit(limit)
-    .offset(offset);
+  if (category) queryBuilder = queryBuilder.eq("category", category);
+  if (merchantId) queryBuilder = queryBuilder.eq("merchant_id", merchantId);
+  if (search) queryBuilder = queryBuilder.ilike("name", `%${search}%`);
 
-  const merchants = await db.select().from(merchantsTable);
-  const merchantMap = new Map(merchants.map((m) => [m.id, m.name]));
+  queryBuilder = queryBuilder.range(offset, offset + limit - 1);
 
-  const result = products.map((p) => ({ ...p, merchantName: merchantMap.get(p.merchantId) ?? null }));
+  const { data: products, error } = await queryBuilder;
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const result = (products || []).map((p: any) => {
+    const camelProduct = camelCaseKeys(p);
+    const merchantName = camelProduct.merchants?.name || null;
+    delete camelProduct.merchants;
+    return { ...camelProduct, merchantName };
+  });
+
   res.json(ListProductsResponse.parse(serializeDates(result)));
 });
 
 router.get("/products/trending", async (_req, res): Promise<void> => {
-  const products = await db.select().from(productsTable).where(eq(productsTable.isTrending, true)).limit(10);
-  const merchants = await db.select().from(merchantsTable);
-  const merchantMap = new Map(merchants.map((m) => [m.id, m.name]));
-  const result = products.map((p) => ({ ...p, merchantName: merchantMap.get(p.merchantId) ?? null }));
+  const { data: products, error } = await supabase
+    .from("products")
+    .select(`
+      *,
+      merchants (
+        name
+      )
+    `)
+    .eq("is_trending", true)
+    .limit(10);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const result = (products || []).map((p: any) => {
+    const camelProduct = camelCaseKeys(p);
+    const merchantName = camelProduct.merchants?.name || null;
+    delete camelProduct.merchants;
+    return { ...camelProduct, merchantName };
+  });
+
   res.json(GetTrendingProductsResponse.parse(serializeDates(result)));
 });
 
@@ -54,14 +84,33 @@ router.get("/products/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const [product] = await db.select().from(productsTable).where(eq(productsTable.id, params.data.id));
+  const { data: products, error } = await supabase
+    .from("products")
+    .select(`
+      *,
+      merchants (
+        name
+      )
+    `)
+    .eq("id", params.data.id)
+    .limit(1);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const product = products?.[0];
   if (!product) {
     res.status(404).json({ error: "Product not found" });
     return;
   }
 
-  const [merchant] = await db.select().from(merchantsTable).where(eq(merchantsTable.id, product.merchantId));
-  res.json(GetProductResponse.parse(serializeDates({ ...product, merchantName: merchant?.name ?? null })));
+  const camelProduct = camelCaseKeys(product);
+  const merchantName = camelProduct.merchants?.name || null;
+  delete camelProduct.merchants;
+
+  res.json(GetProductResponse.parse(serializeDates({ ...camelProduct, merchantName })));
 });
 
 export default router;

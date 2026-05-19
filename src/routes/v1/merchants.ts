@@ -1,13 +1,7 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, and, or } from "drizzle-orm";
-import { serializeDates } from "../lib/serialize";
-import {
-  db,
-  merchantsTable,
-  productsTable,
-  reviewsTable,
-  merchantFollowsTable,
-} from "@workspace/db";
+import { supabase } from "#supabase";
+import { serializeDates, camelCaseKeys } from "../../utils/serialize";
+
 import {
   ListMerchantsResponse,
   GetMerchantResponse,
@@ -20,7 +14,7 @@ import {
   GetMerchantProductsParams,
   GetMerchantReviewsParams,
   ListMerchantsQueryParams,
-} from "@workspace/api-zod";
+} from "#api-zod";
 
 const router: IRouter = Router();
 
@@ -36,32 +30,60 @@ router.get("/merchants", async (req, res): Promise<void> => {
   const limit = query.success && query.data.limit ? Number(query.data.limit) : 20;
   const offset = query.success && query.data.offset ? Number(query.data.offset) : 0;
 
-  const conditions = [];
-  if (category) conditions.push(eq(merchantsTable.cuisineType, category));
-  if (trending) conditions.push(eq(merchantsTable.isTrending, true));
-  if (search) conditions.push(ilike(merchantsTable.name, `%${search}%`));
+  let queryBuilder = supabase.from("merchants").select("*");
 
-  const merchants = await db
-    .select()
-    .from(merchantsTable)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .limit(limit)
-    .offset(offset);
+  if (category) queryBuilder = queryBuilder.eq("cuisine_type", category);
+  if (trending) queryBuilder = queryBuilder.eq("is_trending", true);
+  if (search) queryBuilder = queryBuilder.ilike("name", `%${search}%`);
+
+  queryBuilder = queryBuilder.range(offset, offset + limit - 1);
+
+  const { data: merchants, error } = await queryBuilder;
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
 
   const sessionId = getSessionId(req as any);
-  const follows = await db.select().from(merchantFollowsTable).where(eq(merchantFollowsTable.sessionId, sessionId));
-  const followedIds = new Set(follows.map((f) => f.merchantId));
+  const { data: follows } = await supabase
+    .from("merchant_follows")
+    .select("*")
+    .eq("session_id", sessionId);
 
-  const result = merchants.map((m) => ({ ...m, isFollowing: followedIds.has(m.id) }));
+  const followedIds = new Set((follows || []).map((f: any) => f.merchant_id));
+
+  const result = (merchants || []).map((m: any) => {
+    const camelMerchant = camelCaseKeys(m);
+    return { ...camelMerchant, isFollowing: followedIds.has(camelMerchant.id) };
+  });
+
   res.json(ListMerchantsResponse.parse(serializeDates(result)));
 });
 
 router.get("/merchants/trending", async (req, res): Promise<void> => {
-  const merchants = await db.select().from(merchantsTable).where(eq(merchantsTable.isTrending, true)).limit(10);
+  const { data: merchants, error } = await supabase
+    .from("merchants")
+    .select("*")
+    .eq("is_featured", true)
+    .limit(10);
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
   const sessionId = getSessionId(req as any);
-  const follows = await db.select().from(merchantFollowsTable).where(eq(merchantFollowsTable.sessionId, sessionId));
-  const followedIds = new Set(follows.map((f) => f.merchantId));
-  const result = merchants.map((m) => ({ ...m, isFollowing: followedIds.has(m.id) }));
+  const { data: follows } = await supabase
+    .from("merchant_follows")
+    .select("*")
+    .eq("session_id", sessionId);
+
+  const followedIds = new Set((follows || []).map((f: any) => f.merchant_id));
+
+  const result = (merchants || []).map((m: any) => {
+    const camelMerchant = camelCaseKeys(m);
+    return { ...camelMerchant, isFollowing: followedIds.has(camelMerchant.id) };
+  });
+
   res.json(GetTrendingMerchantsResponse.parse(serializeDates(result)));
 });
 
@@ -72,19 +94,35 @@ router.get("/merchants/:id", async (req, res): Promise<void> => {
     return;
   }
 
-  const [merchant] = await db.select().from(merchantsTable).where(eq(merchantsTable.id, params.data.id));
+  const { data: merchants, error } = await supabase
+    .from("merchants")
+    .select("*")
+    .eq("id", params.data.id)
+    .limit(1);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const merchant = merchants?.[0];
   if (!merchant) {
     res.status(404).json({ error: "Merchant not found" });
     return;
   }
 
   const sessionId = getSessionId(req as any);
-  const [follow] = await db
-    .select()
-    .from(merchantFollowsTable)
-    .where(and(eq(merchantFollowsTable.merchantId, merchant.id), eq(merchantFollowsTable.sessionId, sessionId)));
+  const { data: follows } = await supabase
+    .from("merchant_follows")
+    .select("*")
+    .eq("merchant_id", merchant.id)
+    .eq("session_id", sessionId)
+    .limit(1);
 
-  res.json(GetMerchantResponse.parse(serializeDates({ ...merchant, isFollowing: !!follow })));
+  const isFollowing = (follows || []).length > 0;
+  const camelMerchant = camelCaseKeys(merchant);
+
+  res.json(GetMerchantResponse.parse(serializeDates({ ...camelMerchant, isFollowing })));
 });
 
 router.post("/merchants/:id/follow", async (req, res): Promise<void> => {
@@ -94,31 +132,41 @@ router.post("/merchants/:id/follow", async (req, res): Promise<void> => {
     return;
   }
 
-  const [merchant] = await db.select().from(merchantsTable).where(eq(merchantsTable.id, params.data.id));
+  const { data: merchants } = await supabase
+    .from("merchants")
+    .select("*")
+    .eq("id", params.data.id)
+    .limit(1);
+
+  const merchant = merchants?.[0];
   if (!merchant) {
     res.status(404).json({ error: "Merchant not found" });
     return;
   }
 
   const sessionId = getSessionId(req as any);
-  const [existing] = await db
-    .select()
-    .from(merchantFollowsTable)
-    .where(and(eq(merchantFollowsTable.merchantId, params.data.id), eq(merchantFollowsTable.sessionId, sessionId)));
+  const { data: existingFollows } = await supabase
+    .from("merchant_follows")
+    .select("*")
+    .eq("merchant_id", params.data.id)
+    .eq("session_id", sessionId)
+    .limit(1);
+
+  const existing = existingFollows?.[0];
 
   let isFollowing: boolean;
   let followersCount: number;
 
   if (existing) {
-    await db.delete(merchantFollowsTable).where(eq(merchantFollowsTable.id, existing.id));
-    const newCount = Math.max(0, merchant.followersCount - 1);
-    await db.update(merchantsTable).set({ followersCount: newCount }).where(eq(merchantsTable.id, params.data.id));
+    await supabase.from("merchant_follows").delete().eq("id", existing.id);
+    const newCount = Math.max(0, (merchant.followers_count || 0) - 1);
+    await supabase.from("merchants").update({ followers_count: newCount }).eq("id", params.data.id);
     isFollowing = false;
     followersCount = newCount;
   } else {
-    await db.insert(merchantFollowsTable).values({ merchantId: params.data.id, sessionId });
-    const newCount = merchant.followersCount + 1;
-    await db.update(merchantsTable).set({ followersCount: newCount }).where(eq(merchantsTable.id, params.data.id));
+    await supabase.from("merchant_follows").insert({ merchant_id: params.data.id, session_id: sessionId });
+    const newCount = (merchant.followers_count || 0) + 1;
+    await supabase.from("merchants").update({ followers_count: newCount }).eq("id", params.data.id);
     isFollowing = true;
     followersCount = newCount;
   }
@@ -133,14 +181,24 @@ router.get("/merchants/:id/products", async (req, res): Promise<void> => {
     return;
   }
 
-  const [merchant] = await db.select().from(merchantsTable).where(eq(merchantsTable.id, params.data.id));
+  const { data: merchants } = await supabase
+    .from("merchants")
+    .select("name")
+    .eq("id", params.data.id)
+    .limit(1);
 
-  const products = await db
-    .select()
-    .from(productsTable)
-    .where(eq(productsTable.merchantId, params.data.id));
+  const merchantName = merchants?.[0]?.name ?? null;
 
-  const result = products.map((p) => ({ ...p, merchantName: merchant?.name ?? null }));
+  const { data: products } = await supabase
+    .from("products")
+    .select("*")
+    .eq("merchant_id", params.data.id);
+
+  const result = (products || []).map((p) => {
+    const camelProduct = camelCaseKeys(p);
+    return { ...camelProduct, merchantName };
+  });
+
   res.json(GetMerchantProductsResponse.parse(serializeDates(result)));
 });
 
@@ -151,8 +209,13 @@ router.get("/merchants/:id/reviews", async (req, res): Promise<void> => {
     return;
   }
 
-  const reviews = await db.select().from(reviewsTable).where(eq(reviewsTable.merchantId, params.data.id));
-  res.json(GetMerchantReviewsResponse.parse(serializeDates(reviews)));
+  const { data: reviews } = await supabase
+    .from("reviews")
+    .select("*")
+    .eq("merchant_id", params.data.id);
+
+  const result = camelCaseKeys(reviews || []);
+  res.json(GetMerchantReviewsResponse.parse(serializeDates(result)));
 });
 
 export default router;

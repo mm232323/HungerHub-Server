@@ -1,6 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, feedPostsTable, merchantsTable, feedLikesTable, feedSavesTable } from "@workspace/db";
+import { supabase } from "#supabase";
 import {
   GetFeedResponse,
   LikeFeedPostResponse,
@@ -9,8 +8,8 @@ import {
   LikeFeedPostParams,
   SaveFeedPostParams,
   GetFeedQueryParams,
-} from "@workspace/api-zod";
-import { serializeDates } from "../lib/serialize";
+} from "#api-zod";
+import { serializeDates, camelCaseKeys } from "../../utils/serialize";
 
 const router: IRouter = Router();
 
@@ -23,24 +22,37 @@ router.get("/feed", async (req, res): Promise<void> => {
   const limit = query.success && query.data.limit ? Number(query.data.limit) : 10;
   const offset = query.success && query.data.offset ? Number(query.data.offset) : 0;
 
-  const posts = await db.select().from(feedPostsTable).limit(limit).offset(offset).orderBy(feedPostsTable.createdAt);
-  const merchants = await db.select().from(merchantsTable);
-  const merchantMap = new Map(merchants.map((m) => [m.id, m]));
+  const { data: posts, error } = await supabase
+    .from("feed_posts")
+    .select("*")
+    .range(offset, offset + limit - 1)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const { data: merchants } = await supabase.from("merchants").select("*");
+  const merchantMap = new Map((merchants || []).map((m: any) => [m.id, m]));
 
   const sessionId = getSessionId(req as any);
-  const likes = await db.select().from(feedLikesTable).where(eq(feedLikesTable.sessionId, sessionId));
-  const saves = await db.select().from(feedSavesTable).where(eq(feedSavesTable.sessionId, sessionId));
-  const likedIds = new Set(likes.map((l) => l.feedPostId));
-  const savedIds = new Set(saves.map((s) => s.feedPostId));
+  const { data: likes } = await supabase.from("feed_likes").select("*").eq("session_id", sessionId);
+  const { data: saves } = await supabase.from("feed_saves").select("*").eq("session_id", sessionId);
 
-  const result = posts.map((p) => {
-    const merchant = merchantMap.get(p.merchantId);
+  const likedIds = new Set((likes || []).map((l: any) => l.feed_post_id));
+  const savedIds = new Set((saves || []).map((s: any) => s.feed_post_id));
+
+  const result = (posts || []).map((p: any) => {
+    const camelPost = camelCaseKeys(p);
+    const rawMerchant = merchantMap.get(camelPost.merchantId);
+    const camelMerchant = rawMerchant ? camelCaseKeys(rawMerchant) : null;
     return {
-      ...p,
-      merchant: merchant ? { ...merchant, isFollowing: false } : null,
+      ...camelPost,
+      merchant: camelMerchant ? { ...camelMerchant, isFollowing: false } : null,
       product: null,
-      isLiked: likedIds.has(p.id),
-      isSaved: savedIds.has(p.id),
+      isLiked: likedIds.has(camelPost.id),
+      isSaved: savedIds.has(camelPost.id),
     };
   });
 
@@ -54,31 +66,41 @@ router.post("/feed/:id/like", async (req, res): Promise<void> => {
     return;
   }
 
-  const [post] = await db.select().from(feedPostsTable).where(eq(feedPostsTable.id, params.data.id));
+  const { data: posts, error } = await supabase
+    .from("feed_posts")
+    .select("*")
+    .eq("id", params.data.id)
+    .limit(1);
+
+  const post = posts?.[0];
   if (!post) {
     res.status(404).json({ error: "Post not found" });
     return;
   }
 
   const sessionId = getSessionId(req as any);
-  const [existing] = await db
-    .select()
-    .from(feedLikesTable)
-    .where(and(eq(feedLikesTable.feedPostId, params.data.id), eq(feedLikesTable.sessionId, sessionId)));
+  const { data: existingLikes } = await supabase
+    .from("feed_likes")
+    .select("*")
+    .eq("feed_post_id", params.data.id)
+    .eq("session_id", sessionId)
+    .limit(1);
+
+  const existing = existingLikes?.[0];
 
   let isLiked: boolean;
   let likes: number;
 
   if (existing) {
-    await db.delete(feedLikesTable).where(eq(feedLikesTable.id, existing.id));
-    const newLikes = Math.max(0, post.likes - 1);
-    await db.update(feedPostsTable).set({ likes: newLikes }).where(eq(feedPostsTable.id, params.data.id));
+    await supabase.from("feed_likes").delete().eq("id", existing.id);
+    const newLikes = Math.max(0, (post.likes || 0) - 1);
+    await supabase.from("feed_posts").update({ likes: newLikes }).eq("id", params.data.id);
     isLiked = false;
     likes = newLikes;
   } else {
-    await db.insert(feedLikesTable).values({ feedPostId: params.data.id, sessionId });
-    const newLikes = post.likes + 1;
-    await db.update(feedPostsTable).set({ likes: newLikes }).where(eq(feedPostsTable.id, params.data.id));
+    await supabase.from("feed_likes").insert({ feed_post_id: params.data.id, session_id: sessionId });
+    const newLikes = (post.likes || 0) + 1;
+    await supabase.from("feed_posts").update({ likes: newLikes }).eq("id", params.data.id);
     isLiked = true;
     likes = newLikes;
   }
@@ -93,24 +115,34 @@ router.post("/feed/:id/save", async (req, res): Promise<void> => {
     return;
   }
 
-  const [post] = await db.select().from(feedPostsTable).where(eq(feedPostsTable.id, params.data.id));
+  const { data: posts } = await supabase
+    .from("feed_posts")
+    .select("*")
+    .eq("id", params.data.id)
+    .limit(1);
+
+  const post = posts?.[0];
   if (!post) {
     res.status(404).json({ error: "Post not found" });
     return;
   }
 
   const sessionId = getSessionId(req as any);
-  const [existing] = await db
-    .select()
-    .from(feedSavesTable)
-    .where(and(eq(feedSavesTable.feedPostId, params.data.id), eq(feedSavesTable.sessionId, sessionId)));
+  const { data: existingSaves } = await supabase
+    .from("feed_saves")
+    .select("*")
+    .eq("feed_post_id", params.data.id)
+    .eq("session_id", sessionId)
+    .limit(1);
+
+  const existing = existingSaves?.[0];
 
   let isSaved: boolean;
   if (existing) {
-    await db.delete(feedSavesTable).where(eq(feedSavesTable.id, existing.id));
+    await supabase.from("feed_saves").delete().eq("id", existing.id);
     isSaved = false;
   } else {
-    await db.insert(feedSavesTable).values({ feedPostId: params.data.id, sessionId });
+    await supabase.from("feed_saves").insert({ feed_post_id: params.data.id, session_id: sessionId });
     isSaved = true;
   }
 
@@ -118,14 +150,27 @@ router.post("/feed/:id/save", async (req, res): Promise<void> => {
 });
 
 router.get("/feed/stories", async (req, res): Promise<void> => {
-  const merchants = await db.select().from(merchantsTable).limit(8);
-  const result = merchants.map((m, i) => ({
-    id: i + 1,
-    merchantId: m.id,
-    merchant: { ...m, isFollowing: false },
-    image: m.coverImage,
-    hasUnviewed: Math.random() > 0.3,
-  }));
+  const { data: merchants, error } = await supabase
+    .from("merchants")
+    .select("*")
+    .limit(8);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const result = (merchants || []).map((m: any, i: number) => {
+    const camelMerchant = camelCaseKeys(m);
+    return {
+      id: i + 1,
+      merchantId: camelMerchant.id,
+      merchant: { ...camelMerchant, isFollowing: false },
+      image: camelMerchant.coverImage,
+      hasUnviewed: Math.random() > 0.3,
+    };
+  });
+
   res.json(GetFeedStoriesResponse.parse(serializeDates(result)));
 });
 

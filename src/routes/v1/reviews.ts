@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { db, reviewsTable } from "@workspace/db";
-import { CreateReviewBody } from "@workspace/api-zod";
-import { serializeDates } from "../lib/serialize";
+import { supabase } from "#supabase";
+import { CreateReviewBody } from "#api-zod";
+import { serializeDates, camelCaseKeys, snakeCaseKeys } from "../../utils/serialize";
 
 const router: IRouter = Router();
 
@@ -12,7 +12,19 @@ router.post("/reviews", async (req, res): Promise<void> => {
     return;
   }
 
-  const [review] = await db.insert(reviewsTable).values(parsed.data).returning();
+  const dbData = snakeCaseKeys(parsed.data);
+  const { data, error } = await supabase
+    .from("reviews")
+    .insert(dbData)
+    .select()
+    .limit(1);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const review = camelCaseKeys(data?.[0]);
   res.status(201).json(serializeDates(review));
 });
 
