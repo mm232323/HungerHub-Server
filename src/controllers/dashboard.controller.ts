@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { supabase } from "#supabase";
+import { getAuth, createClerkClient } from "@clerk/express";
 import { serializeDates, camelCaseKeys, snakeCaseKeys } from "../utils/serialize";
 import {
   GetDashboardStatsResponse,
@@ -17,13 +18,58 @@ import {
   GetDashboardOrdersQueryParams,
 } from "#api-zod";
 
-const DEMO_MERCHANT_ID = 1;
+const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY || "" });
 
-export async function stats(_req: Request, res: Response): Promise<void> {
+async function getMerchantId(req: Request): Promise<number> {
+  const auth = getAuth(req);
+
+  if (!auth?.userId) {
+    throw new Error("Unauthorized");
+  }
+
+  try {
+    const user = await clerkClient.users.getUser(auth.userId);
+    const merchantId = user.unsafeMetadata?.merchantId;
+    if (typeof merchantId === 'number') return merchantId;
+
+    let queryBuilder = supabase.from('merchants').select('id');
+    if (user.username) {
+        queryBuilder = queryBuilder.or(`session_id.eq.${auth.userId},owner_user_name.eq.${user.username}`);
+    } else {
+        queryBuilder = queryBuilder.eq('session_id', auth.userId);
+    }
+    const { data: merchants, error } = await queryBuilder.limit(1);
+    const merchant = merchants?.[0];
+
+    if (error || !merchant) {
+      throw new Error("Not a merchant");
+    }
+
+    // Update clerk metadata for future requests
+    await clerkClient.users.updateUser(auth.userId, {
+      unsafeMetadata: { ...user.unsafeMetadata, merchantId: merchant.id, role: 'merchant' }
+    });
+    
+    return merchant.id;
+  } catch (e: any) {
+    if (e.message === "Not a merchant" || e.message === "Unauthorized") {
+      throw e;
+    }
+    throw new Error("Not a merchant");
+  }
+}
+
+export async function initMerchant(req: Request, res: Response): Promise<void> {
+  const merchantId = await getMerchantId(req);
+  res.status(200).json({ merchantId });
+}
+
+export async function stats(req: Request, res: Response): Promise<void> {
+  const merchantId = await getMerchantId(req);
   const { data: orders, error } = await supabase
     .from("orders")
     .select("*")
-    .eq("merchant_id", DEMO_MERCHANT_ID);
+    .eq("merchant_id", merchantId);
 
   if (error) {
     res.status(500).json({ error: error.message });
@@ -74,31 +120,65 @@ export async function stats(_req: Request, res: Response): Promise<void> {
 }
 
 export async function revenueChart(
-  _req: Request,
+  req: Request,
   res: Response,
 ): Promise<void> {
-  const data: Array<{ date: string; revenue: number; orders: number }> = [];
+  const merchantId = await getMerchantId(req);
+  
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  
+  const { data: orders, error } = await supabase
+    .from("orders")
+    .select("created_at, total")
+    .eq("merchant_id", merchantId)
+    .gte("created_at", thirtyDaysAgo.toISOString());
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const camelOrders = camelCaseKeys(orders ?? []);
+  
+  const dataMap = new Map<string, { revenue: number; orders: number }>();
+  
   const now = new Date();
   for (let i = 29; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
-    data.push({
-      date: d.toISOString().split("T")[0] as string,
-      revenue: Math.floor(Math.random() * 800 + 200),
-      orders: Math.floor(Math.random() * 30 + 5),
-    });
+    const dateStr = d.toISOString().split("T")[0];
+    if (dateStr) dataMap.set(dateStr, { revenue: 0, orders: 0 });
   }
+
+  for (const order of camelOrders) {
+    if (!order.createdAt) continue;
+    const dateStr = new Date(order.createdAt).toISOString().split("T")[0];
+    if (dateStr && dataMap.has(dateStr)) {
+      const current = dataMap.get(dateStr)!;
+      current.revenue += order.total || 0;
+      current.orders += 1;
+    }
+  }
+
+  const data = Array.from(dataMap.entries()).map(([date, stats]) => ({
+    date,
+    revenue: Math.round(stats.revenue * 100) / 100,
+    orders: stats.orders,
+  }));
+
   res.json(GetRevenueChartResponse.parse(data));
 }
 
 export async function listOrders(req: Request, res: Response): Promise<void> {
+  const merchantId = await getMerchantId(req);
   const query = GetDashboardOrdersQueryParams.safeParse(req.query);
   const status = query.success ? query.data.status : undefined;
 
   let queryBuilder = supabase
     .from("orders")
     .select("*")
-    .eq("merchant_id", DEMO_MERCHANT_ID)
+    .eq("merchant_id", merchantId)
     .order("created_at", { ascending: true });
 
   if (status) queryBuilder = queryBuilder.eq("status", status);
@@ -118,13 +198,14 @@ export async function listOrders(req: Request, res: Response): Promise<void> {
 }
 
 export async function listProducts(
-  _req: Request,
+  req: Request,
   res: Response,
 ): Promise<void> {
+  const merchantId = await getMerchantId(req);
   const { data: products, error } = await supabase
     .from("products")
     .select("*")
-    .eq("merchant_id", DEMO_MERCHANT_ID);
+    .eq("merchant_id", merchantId);
 
   if (error) {
     res.status(500).json({ error: error.message });
@@ -140,13 +221,41 @@ export async function listProducts(
 }
 
 export async function createProduct(req: Request, res: Response): Promise<void> {
+  const merchantId = await getMerchantId(req);
   const parsed = CreateProductBody.safeParse(req.body);
   if (!parsed.success) {
+    console.error("Product validation error:", parsed.error);
     res.status(400).json({ error: parsed.error.message });
     return;
   }
 
-  const dbData = snakeCaseKeys({ ...parsed.data, merchantId: DEMO_MERCHANT_ID });
+  // Validate required string fields are not empty
+  if (!parsed.data.name?.trim()) {
+    res.status(400).json({ error: "Product name is required and cannot be empty" });
+    return;
+  }
+  if (!parsed.data.description?.trim()) {
+    res.status(400).json({ error: "Product description is required and cannot be empty" });
+    return;
+  }
+  if (!parsed.data.category?.trim()) {
+    res.status(400).json({ error: "Product category is required and cannot be empty" });
+    return;
+  }
+
+  console.log("Creating product for merchant:", merchantId);
+
+  const dbData = snakeCaseKeys({
+    ...parsed.data,
+    name: parsed.data.name.trim(),
+    description: parsed.data.description.trim(),
+    price: parsed.data.price != null ? Math.round(parsed.data.price * 100) / 100 : undefined,
+    discountPrice: parsed.data.discountPrice != null ? Math.round(parsed.data.discountPrice * 100) / 100 : undefined,
+    stock: parsed.data.stock != null ? Math.round(parsed.data.stock) : undefined,
+    preparationTime: parsed.data.preparationTime != null ? Math.round(parsed.data.preparationTime) : undefined,
+    merchantId
+  });
+
   const { data, error } = await supabase
     .from("products")
     .insert(dbData)
@@ -154,17 +263,34 @@ export async function createProduct(req: Request, res: Response): Promise<void> 
     .limit(1);
 
   if (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Database error creating product:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      merchantId,
+      dbData
+    });
+    res.status(500).json({ 
+      error: error.message || "Failed to create product",
+      code: error.code
+    });
     return;
   }
 
-  const product = camelCaseKeys(data?.[0]);
+  if (!data || data.length === 0) {
+    console.error("No data returned from product insert");
+    res.status(500).json({ error: "Failed to create product - no data returned" });
+    return;
+  }
+
+  const product = camelCaseKeys(data[0]);
   res
     .status(201)
     .json(serializeDates({ ...product, merchantName: "My Restaurant" }));
 }
 
 export async function updateProduct(req: Request, res: Response): Promise<void> {
+  const merchantId = await getMerchantId(req);
   const params = UpdateProductParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -177,12 +303,18 @@ export async function updateProduct(req: Request, res: Response): Promise<void> 
     return;
   }
 
-  const dbData = snakeCaseKeys(parsed.data);
+  const dbData = snakeCaseKeys({
+    ...parsed.data,
+    price: parsed.data.price != null ? Math.round(parsed.data.price) : undefined,
+    discountPrice: parsed.data.discountPrice != null ? Math.round(parsed.data.discountPrice) : undefined,
+    stock: parsed.data.stock != null ? Math.round(parsed.data.stock) : undefined,
+    preparationTime: parsed.data.preparationTime != null ? Math.round(parsed.data.preparationTime) : undefined,
+  });
   const { data, error } = await supabase
     .from("products")
     .update(dbData)
     .eq("id", params.data.id)
-    .eq("merchant_id", DEMO_MERCHANT_ID)
+    .eq("merchant_id", merchantId)
     .select()
     .limit(1);
 
@@ -202,6 +334,7 @@ export async function updateProduct(req: Request, res: Response): Promise<void> 
 }
 
 export async function deleteProduct(req: Request, res: Response): Promise<void> {
+  const merchantId = await getMerchantId(req);
   const params = DeleteProductParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -212,7 +345,7 @@ export async function deleteProduct(req: Request, res: Response): Promise<void> 
     .from("products")
     .delete()
     .eq("id", params.data.id)
-    .eq("merchant_id", DEMO_MERCHANT_ID);
+    .eq("merchant_id", merchantId);
 
   if (error) {
     res.status(500).json({ error: error.message });
@@ -222,32 +355,98 @@ export async function deleteProduct(req: Request, res: Response): Promise<void> 
   res.sendStatus(204);
 }
 
-export async function analytics(_req: Request, res: Response): Promise<void> {
-  const topOrderTimes = Array.from({ length: 24 }, (_, h) => ({
-    hour: h,
-    count:
-      h >= 11 && h <= 14
-        ? Math.floor(Math.random() * 30 + 20)
-        : h >= 18 && h <= 21
-          ? Math.floor(Math.random() * 40 + 25)
-          : Math.floor(Math.random() * 10 + 2),
+export async function analytics(req: Request, res: Response): Promise<void> {
+  const merchantId = await getMerchantId(req);
+  
+  const { data: orders, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("merchant_id", merchantId);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const camelOrders = camelCaseKeys(orders ?? []);
+  
+  const customerOrderCounts = new Map<string, number>();
+  let totalCustomers = 0;
+  let repeatBuyers = 0;
+  let newCustomers = 0;
+  
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const topOrderTimesMap = new Map<number, number>();
+  for (let h = 0; h < 24; h++) topOrderTimesMap.set(h, 0);
+
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const orderHeatmapMap = new Map<string, Map<number, number>>();
+  for (const day of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]) {
+    const hoursMap = new Map<number, number>();
+    for (let h = 0; h < 24; h++) hoursMap.set(h, 0);
+    orderHeatmapMap.set(day, hoursMap);
+  }
+
+  const customerFirstOrderDate = new Map<string, Date>();
+
+  for (const order of camelOrders) {
+    const customer = (order.customerName as string) || "Guest User";
+    const currentCount = customerOrderCounts.get(customer) || 0;
+    customerOrderCounts.set(customer, currentCount + 1);
+
+    if (!order.createdAt) continue;
+    const orderDate = new Date(order.createdAt as string);
+    if (!customerFirstOrderDate.has(customer) || orderDate < customerFirstOrderDate.get(customer)!) {
+      customerFirstOrderDate.set(customer, orderDate);
+    }
+
+    const hour = orderDate.getHours();
+    if (topOrderTimesMap.has(hour)) {
+        topOrderTimesMap.set(hour, topOrderTimesMap.get(hour)! + 1);
+    }
+    
+    const dayStr = days[orderDate.getDay()];
+    if (dayStr && orderHeatmapMap.has(dayStr)) {
+      const hMap = orderHeatmapMap.get(dayStr)!;
+      if (hMap.has(hour)) {
+          hMap.set(hour, hMap.get(hour)! + 1);
+      }
+    }
+  }
+
+  totalCustomers = customerOrderCounts.size;
+  
+  for (const [customer, count] of customerOrderCounts.entries()) {
+    if (count > 1) repeatBuyers++;
+    const firstOrderDate = customerFirstOrderDate.get(customer)!;
+    if (firstOrderDate >= thirtyDaysAgo) {
+      newCustomers++;
+    }
+  }
+
+  const repeatBuyerRate = totalCustomers > 0 ? (repeatBuyers / totalCustomers) * 100 : 0;
+  const retentionRate = totalCustomers > 0 ? Math.min(repeatBuyerRate * 1.5, 100) : 0; // naive retention based on repeat
+
+  const topOrderTimes = Array.from(topOrderTimesMap.entries()).map(([hour, count]) => ({
+    hour,
+    count,
   }));
 
-  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const orderHeatmap = days.flatMap((day) =>
-    Array.from({ length: 24 }, (_, h) => ({
-      day,
-      hour: h,
-      count: Math.floor(Math.random() * 15),
-    })),
-  );
+  const orderHeatmap: { day: string; hour: number; count: number }[] = [];
+  for (const [day, hMap] of orderHeatmapMap.entries()) {
+    for (const [hour, count] of hMap.entries()) {
+      orderHeatmap.push({ day, hour, count });
+    }
+  }
 
   res.json(
     GetCustomerAnalyticsResponse.parse({
-      retentionRate: 68.4,
-      repeatBuyerRate: 42.1,
-      totalCustomers: 847,
-      newCustomers: 124,
+      retentionRate: Math.round(retentionRate * 10) / 10,
+      repeatBuyerRate: Math.round(repeatBuyerRate * 10) / 10,
+      totalCustomers,
+      newCustomers,
       topOrderTimes,
       orderHeatmap,
       demographics: [
@@ -260,45 +459,64 @@ export async function analytics(_req: Request, res: Response): Promise<void> {
   );
 }
 
-export async function topProducts(_req: Request, res: Response): Promise<void> {
-  const { data: products, error } = await supabase
-    .from("products")
-    .select("*")
-    .eq("merchant_id", DEMO_MERCHANT_ID)
-    .limit(5);
+export async function topProducts(req: Request, res: Response): Promise<void> {
+  const merchantId = await getMerchantId(req);
+  
+  const { data: orders, error: ordersError } = await supabase
+    .from("orders")
+    .select("items")
+    .eq("merchant_id", merchantId);
 
-  if (error) {
-    res.status(500).json({ error: error.message });
+  if (ordersError) {
+    res.status(500).json({ error: ordersError.message });
     return;
   }
 
-  const result = (products ?? []).map((p: Record<string, unknown>, i: number) => {
-    const camelProduct = camelCaseKeys(p) as {
-      id: number;
-      name: string;
-      image: string;
-    };
-    return {
-      productId: camelProduct.id,
-      name: camelProduct.name,
-      image: camelProduct.image,
-      totalSold: Math.floor(Math.random() * 200 + 50),
-      revenue: Math.floor(Math.random() * 2000 + 500),
-      rank: i + 1,
-    };
-  });
+  const camelOrders = camelCaseKeys(orders ?? []);
+  const productStats = new Map<number, { totalSold: number; revenue: number; name: string; image: string | null }>();
+
+  for (const order of camelOrders) {
+    const items = (order.items as Array<any>) || [];
+    for (const item of items) {
+      if (!productStats.has(item.productId)) {
+        productStats.set(item.productId, {
+          totalSold: 0,
+          revenue: 0,
+          name: item.productName || "Unknown",
+          image: item.productImage || null
+        });
+      }
+      const stats = productStats.get(item.productId)!;
+      stats.totalSold += (item.quantity || 1);
+      stats.revenue += (item.quantity || 1) * (item.price || 0);
+    }
+  }
+
+  const sortedProducts = Array.from(productStats.entries())
+    .map(([productId, stats]) => ({
+      productId,
+      name: stats.name,
+      image: stats.image || "",
+      totalSold: stats.totalSold,
+      revenue: Math.round(stats.revenue * 100) / 100,
+    }))
+    .sort((a, b) => b.totalSold - a.totalSold)
+    .slice(0, 5);
+    
+  const result = sortedProducts.map((p, i) => ({ ...p, rank: i + 1 }));
 
   res.json(GetTopProductsResponse.parse(result));
 }
 
 export async function listPromotions(
-  _req: Request,
+  req: Request,
   res: Response,
 ): Promise<void> {
+  const merchantId = await getMerchantId(req);
   const { data: promotions, error } = await supabase
     .from("promotions")
     .select("*")
-    .eq("merchant_id", DEMO_MERCHANT_ID);
+    .eq("merchant_id", merchantId);
 
   if (error) {
     res.status(500).json({ error: error.message });
@@ -313,6 +531,7 @@ export async function createPromotion(
   req: Request,
   res: Response,
 ): Promise<void> {
+  const merchantId = await getMerchantId(req);
   const parsed = CreatePromotionBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -321,7 +540,7 @@ export async function createPromotion(
 
   const dbData = snakeCaseKeys({
     ...parsed.data,
-    merchantId: DEMO_MERCHANT_ID,
+    merchantId,
   });
   const { data, error } = await supabase
     .from("promotions")
@@ -336,4 +555,59 @@ export async function createPromotion(
 
   const promotion = camelCaseKeys(data?.[0]);
   res.status(201).json(serializeDates(promotion));
+}
+
+import * as z from "zod";
+
+export async function getProfile(req: Request, res: Response): Promise<void> {
+  const merchantId = await getMerchantId(req);
+  const { data, error } = await supabase
+    .from("merchants")
+    .select("*")
+    .eq("id", merchantId)
+    .single();
+
+  if (error || !data) {
+    res.status(404).json({ error: "Merchant not found" });
+    return;
+  }
+
+  res.status(200).json(serializeDates(camelCaseKeys(data)));
+}
+
+const UpdateProfileSchema = z.object({
+  name: z.string().optional(),
+  bio: z.string().optional(),
+  cuisineType: z.string().optional(),
+  deliveryTime: z.string().optional(),
+  deliveryFee: z.number().optional(),
+  address: z.string().optional(),
+  isOpen: z.boolean().optional(),
+  profileImage: z.string().optional(),
+  coverImage: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+export async function updateProfile(req: Request, res: Response): Promise<void> {
+  const merchantId = await getMerchantId(req);
+  const parsed = UpdateProfileSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const dbData = snakeCaseKeys(parsed.data);
+  const { data, error } = await supabase
+    .from("merchants")
+    .update(dbData)
+    .eq("id", merchantId)
+    .select()
+    .single();
+
+  if (error || !data) {
+    res.status(500).json({ error: error?.message || "Failed to update profile" });
+    return;
+  }
+
+  res.status(200).json(serializeDates(camelCaseKeys(data)));
 }

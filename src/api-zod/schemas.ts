@@ -36,6 +36,7 @@ export const ListMerchantsQueryParams = zod.object({
   search: zod.coerce.string().optional(),
   limit: zod.coerce.number().optional(),
   offset: zod.coerce.number().optional(),
+  ownerUserName: zod.string().optional(),
 });
 
 export const ListMerchantsResponseItem = zod.object({
@@ -704,6 +705,11 @@ export const CreateProductBody = zod.object({
   stock: zod.number().nullish(),
   ingredients: zod.array(zod.string()).optional(),
   nutritionalInfo: zod.string().nullish(),
+  preparationTime: zod.number().nullish(),
+  dietaryTags: zod.array(zod.string()).optional(),
+  customizations: zod.array(zod.string()).optional(),
+  facebookUrl: zod.string().nullish(),
+  instagramUrl: zod.string().nullish(),
 });
 
 /**
@@ -724,6 +730,11 @@ export const UpdateProductBody = zod.object({
   stock: zod.number().nullish(),
   ingredients: zod.array(zod.string()).optional(),
   nutritionalInfo: zod.string().nullish(),
+  preparationTime: zod.number().nullish(),
+  dietaryTags: zod.array(zod.string()).optional(),
+  customizations: zod.array(zod.string()).optional(),
+  facebookUrl: zod.string().nullish(),
+  instagramUrl: zod.string().nullish(),
 });
 
 export const UpdateProductResponse = zod.object({
@@ -824,4 +835,21 @@ export const CreatePromotionBody = zod.object({
   startDate: zod.string(),
   endDate: zod.string(),
   isActive: zod.boolean().optional(),
+});
+
+/**
+ * @summary Create a merchant
+ */
+export const CreateMerchantBody = zod.object({
+  name: zod.string(),
+  bio: zod.string(),
+  cuisineType: zod.string(),
+  deliveryTime: zod.string(),
+  deliveryFee: zod.number(),
+  address: zod.string(),
+  isOpen: zod.boolean().optional(),
+  profileImage: zod.string().optional(),
+  coverImage: zod.string().optional(),
+  tags: zod.array(zod.string()).optional(),
+  ownerUserName: zod.string().optional(),
 });

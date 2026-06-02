@@ -13,14 +13,66 @@ import {
   GetMerchantProductsParams,
   GetMerchantReviewsParams,
   ListMerchantsQueryParams,
+  CreateMerchantBody,
 } from "#api-zod";
 import { getSessionId } from "./session";
+
+export async function create(req: Request, res: Response): Promise<void> {
+  const body = CreateMerchantBody.safeParse(req.body);
+  if (!body.success) {
+    res.status(400).json({ error: body.error.message });
+    return;
+  }
+
+  const slug = body.data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+  const { data: merchants, error } = await supabase
+    .from("merchants")
+    .insert([
+      {
+        name: body.data.name,
+        slug,
+        bio: body.data.bio,
+        cuisine_type: body.data.cuisineType,
+        delivery_time: body.data.deliveryTime,
+        delivery_fee: body.data.deliveryFee,
+        address: body.data.address,
+        is_open: body.data.isOpen ?? false,
+        profile_image: body.data.profileImage ?? "https://picsum.photos/400/400",
+        cover_image: body.data.coverImage ?? "https://picsum.photos/1200/400",
+        tags: body.data.tags ?? [],
+        rating: 0,
+        followers_count: 0,
+        owner_user_name: body.data.ownerUserName,
+      },
+    ])
+    .select("*");
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const merchant = merchants?.[0];
+  if (!merchant) {
+    res.status(500).json({ error: "Failed to create merchant" });
+    return;
+  }
+
+  const camelMerchant = camelCaseKeys(merchant);
+  res.status(201).json(
+    GetMerchantResponse.parse(
+      serializeDates({ ...camelMerchant, isFollowing: false }),
+    ),
+  );
+}
 
 export async function list(req: Request, res: Response): Promise<void> {
   const query = ListMerchantsQueryParams.safeParse(req.query);
   const category = query.success ? query.data.category : undefined;
   const trending = query.success ? query.data.trending : undefined;
   const search = query.success ? query.data.search : undefined;
+  const ownerUserName = query.success && "ownerUserName" in query.data ? query.data.ownerUserName : undefined;
   const limit =
     query.success && query.data.limit ? Number(query.data.limit) : 20;
   const offset =
@@ -31,6 +83,7 @@ export async function list(req: Request, res: Response): Promise<void> {
   if (category) queryBuilder = queryBuilder.eq("cuisine_type", category);
   if (trending) queryBuilder = queryBuilder.eq("is_trending", true);
   if (search) queryBuilder = queryBuilder.ilike("name", `%${search}%`);
+  if (ownerUserName) queryBuilder = queryBuilder.eq("owner_user_name", ownerUserName);
 
   queryBuilder = queryBuilder.range(offset, offset + limit - 1);
 

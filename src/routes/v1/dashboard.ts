@@ -3,6 +3,9 @@ import * as dashboardController from "../../controllers/dashboard.controller";
 
 const router: IRouter = Router();
 
+router.post("/dashboard/init", dashboardController.initMerchant);
+router.get("/dashboard/merchant", dashboardController.getProfile);
+router.put("/dashboard/merchant", dashboardController.updateProfile);
 router.get("/dashboard/stats", dashboardController.stats);
 router.get("/dashboard/revenue-chart", dashboardController.revenueChart);
 /** Client uses `/dashboard/revenue` */

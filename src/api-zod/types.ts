@@ -63,7 +63,23 @@ export interface Merchant {
   isFollowing: boolean;
   isTrending?: boolean;
   tags?: string[];
+  ownerUserName?: string;
 }
+
+export interface CreateMerchantInput {
+  name: string;
+  bio: string;
+  cuisineType: string;
+  deliveryTime: string;
+  deliveryFee: number;
+  address: string;
+  isOpen?: boolean;
+  profileImage?: string;
+  coverImage?: string;
+  tags?: string[];
+  ownerUserName?: string;
+}
+
 
 export type FeedPostProduct = { [key: string]: unknown } | null;
 

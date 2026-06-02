@@ -5,6 +5,7 @@ const router: IRouter = Router();
 
 router.get("/merchants/trending", merchantsController.trending);
 router.get("/merchants", merchantsController.list);
+router.post("/merchants", merchantsController.create);
 router.get("/merchants/:id/products", merchantsController.listProducts);
 router.get("/merchants/:id/reviews", merchantsController.listReviews);
 router.get("/merchants/:id", merchantsController.getById);

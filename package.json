@@ -21,7 +21,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@clerk/express": "^2.1.15",
+    "@clerk/express": "^2.1.21",
     "@clerk/shared": "^4.10.2",
     "@supabase/supabase-js": "^2.105.4",
     "cookie-parser": "^1.4.7",
