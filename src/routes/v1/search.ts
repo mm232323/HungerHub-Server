@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import * as searchController from "../../controllers/search.controller";
+import * as searchController from "../../controllers/search.controller.js";
 
 const router: IRouter = Router();
 

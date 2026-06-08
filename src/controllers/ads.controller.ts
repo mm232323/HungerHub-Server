@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { supabase } from "#supabase";
-import { serializeDates, camelCaseKeys, snakeCaseKeys } from "../utils/serialize";
+import { serializeDates, camelCaseKeys, snakeCaseKeys } from "../utils/serialize.js";
 import { CreateAdBody, AdResponse, UpdateAdBody } from "#api-zod";
 
 async function getMerchantId(req: Request): Promise<number> {

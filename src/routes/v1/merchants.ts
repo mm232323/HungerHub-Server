@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import * as merchantsController from "../../controllers/merchants.controller";
+import * as merchantsController from "../../controllers/merchants.controller.js";
 
 const router: IRouter = Router();
 

@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { uploadToCloudinary } from '../utils/cloudinary';
+import { uploadToCloudinary } from '../utils/cloudinary.js';
 
 /**
  * POST /api/v1/upload

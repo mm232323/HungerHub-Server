@@ -10,8 +10,8 @@ import {
   SaveFeedPostParams,
   GetFeedQueryParams,
 } from "#api-zod";
-import { serializeDates, camelCaseKeys } from "../utils/serialize";
-import { getSessionId } from "./session";
+import { serializeDates, camelCaseKeys } from "../utils/serialize.js";
+import { getSessionId } from "./session.js";
 
 export async function list(req: Request, res: Response): Promise<void> {
   const query = GetFeedQueryParams.safeParse(req.query);

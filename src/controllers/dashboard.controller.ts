@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { supabase } from "#supabase";
 import { getAuth, createClerkClient } from "@clerk/express";
-import { serializeDates, camelCaseKeys, snakeCaseKeys } from "../utils/serialize";
+import { serializeDates, camelCaseKeys, snakeCaseKeys } from "../utils/serialize.js";
 import {
   GetDashboardStatsResponse,
   GetRevenueChartResponse,

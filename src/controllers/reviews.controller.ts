@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { supabase } from "#supabase";
 import { CreateReviewBody } from "#api-zod";
-import { serializeDates, camelCaseKeys, snakeCaseKeys } from "../utils/serialize";
+import { serializeDates, camelCaseKeys, snakeCaseKeys } from "../utils/serialize.js";
 
 export async function create(req: Request, res: Response): Promise<void> {
   const parsed = CreateReviewBody.safeParse(req.body);

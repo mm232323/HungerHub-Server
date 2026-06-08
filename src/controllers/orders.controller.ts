@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { supabase } from "#supabase";
-import { serializeDates, camelCaseKeys } from "../utils/serialize";
+import { serializeDates, camelCaseKeys } from "../utils/serialize.js";
 import {
   ListOrdersResponse,
   GetOrderResponse,

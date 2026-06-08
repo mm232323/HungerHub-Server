@@ -1,14 +1,14 @@
-import "./load-env";
+import "./load-env.js";
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
 import router from "./routes/index.js";
-import { logger } from "./utils/logger";
+import { logger } from "./utils/logger.js";
 import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
-} from "./middleware/clerkProxyMiddleware";
+} from "./middleware/clerkProxyMiddleware.js";
 
 const app: Express = express();
 

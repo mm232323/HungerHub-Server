@@ -1,16 +1,16 @@
 import { Router, type IRouter } from "express";
-import healthRouter from "./v1/health";
-import categoriesRouter from "./v1/categories";
-import merchantsRouter from "./v1/merchants";
-import productsRouter from "./v1/products";
-import feedRouter from "./v1/feed";
-import ordersRouter from "./v1/orders";
-import reviewsRouter from "./v1/reviews";
-import searchRouter from "./v1/search";
-import dashboardRouter from "./v1/dashboard";
-import usersRouter from "./v1/users";
-import adsRouter from "./v1/ads";
-import uploadRouter from "./v1/upload";
+import healthRouter from "./v1/health.js";
+import categoriesRouter from "./v1/categories.js";
+import merchantsRouter from "./v1/merchants.js";
+import productsRouter from "./v1/products.js";
+import feedRouter from "./v1/feed.js";
+import ordersRouter from "./v1/orders.js";
+import reviewsRouter from "./v1/reviews.js";
+import searchRouter from "./v1/search.js";
+import dashboardRouter from "./v1/dashboard.js";
+import usersRouter from "./v1/users.js";
+import adsRouter from "./v1/ads.js";
+import uploadRouter from "./v1/upload.js";
 
 const router: IRouter = Router();
 const version = `/${process.env.API_VERSION || "v1"}`;

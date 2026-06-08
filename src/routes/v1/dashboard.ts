@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import * as dashboardController from "../../controllers/dashboard.controller";
+import * as dashboardController from "../../controllers/dashboard.controller.js";
 
 const router: IRouter = Router();
 

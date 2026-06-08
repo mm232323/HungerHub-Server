@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import * as feedController from "../../controllers/feed.controller";
+import * as feedController from "../../controllers/feed.controller.js";
 
 const router: IRouter = Router();
 

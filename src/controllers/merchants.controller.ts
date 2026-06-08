@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { supabase } from "#supabase";
-import { serializeDates, camelCaseKeys } from "../utils/serialize";
+import { serializeDates, camelCaseKeys } from "../utils/serialize.js";
 import {
   ListMerchantsResponse,
   GetMerchantResponse,
@@ -15,7 +15,7 @@ import {
   ListMerchantsQueryParams,
   CreateMerchantBody,
 } from "#api-zod";
-import { getSessionId } from "./session";
+import { getSessionId } from "./session.js";
 
 export async function create(req: Request, res: Response): Promise<void> {
   const body = CreateMerchantBody.safeParse(req.body);

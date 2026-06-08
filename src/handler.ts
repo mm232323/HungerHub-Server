@@ -1,6 +1,6 @@
-import "./load-env";
-import app from "./app";
-import { logger } from "./utils/logger";
+import "./load-env.js";
+import app from "./app.js";
+import { logger } from "./utils/logger.js";
 
 const rawPort = process.env["PORT"];
 

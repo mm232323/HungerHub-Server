@@ -7,7 +7,7 @@ import {
   GetProductParams,
   ListProductsQueryParams,
 } from "#api-zod";
-import { serializeDates, camelCaseKeys } from "../utils/serialize";
+import { serializeDates, camelCaseKeys } from "../utils/serialize.js";
 
 export async function list(req: Request, res: Response): Promise<void> {
   const query = ListProductsQueryParams.safeParse(req.query);

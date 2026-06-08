@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import * as adsController from "../../controllers/ads.controller";
+import * as adsController from "../../controllers/ads.controller.js";
 
 const router: IRouter = Router();
 

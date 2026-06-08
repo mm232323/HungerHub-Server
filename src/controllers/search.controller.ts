@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { supabase } from "#supabase";
 import { SearchResponse, SearchQueryParams } from "#api-zod";
-import { serializeDates, camelCaseKeys } from "../utils/serialize";
+import { serializeDates, camelCaseKeys } from "../utils/serialize.js";
 
 export async function search(req: Request, res: Response): Promise<void> {
   const query = SearchQueryParams.safeParse(req.query);
