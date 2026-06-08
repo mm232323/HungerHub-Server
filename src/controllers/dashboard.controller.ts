@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { supabase } from "#supabase";
+import { supabase } from '../lib/supabase.js';
 import { getAuth, createClerkClient } from "@clerk/express";
 import { serializeDates, camelCaseKeys, snakeCaseKeys } from "../utils/serialize.js";
 import {
@@ -16,7 +16,7 @@ import {
   ListPromotionsResponse,
   CreatePromotionBody,
   GetDashboardOrdersQueryParams,
-} from "#api-zod";
+} from '../api-zod/index.js';
 
 const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY || "" });
 

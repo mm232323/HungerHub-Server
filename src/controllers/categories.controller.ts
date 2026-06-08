@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
-import { supabase } from "#supabase";
-import { ListCategoriesResponse } from "#api-zod";
+import { supabase } from '../lib/supabase.js';
+import { ListCategoriesResponse } from '../api-zod/index.js';
 
 export async function list(_req: Request, res: Response): Promise<void> {
   const { data: categories, error } = await supabase

@@ -7,7 +7,7 @@ export type {
   OrderItem,
   Review,
   Promotion,
-} from "#api-zod";
+} from '../api-zod/index.js';
 
 // Pagination Generic Types
 export interface PaginatedPage<T> {

@@ -1,6 +1,6 @@
 import { clerkClient } from '@clerk/express';
 import type { Request, Response } from "express";
-import { supabase } from "#supabase";
+import { supabase } from '../lib/supabase.js';
 import {
   GetFeedResponse,
   LikeFeedPostResponse,
@@ -9,7 +9,7 @@ import {
   LikeFeedPostParams,
   SaveFeedPostParams,
   GetFeedQueryParams,
-} from "#api-zod";
+} from '../api-zod/index.js';
 import { serializeDates, camelCaseKeys } from "../utils/serialize.js";
 import { getSessionId } from "./session.js";
 

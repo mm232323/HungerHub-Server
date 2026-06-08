@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { supabase } from "#supabase";
+import { supabase } from '../lib/supabase.js';
 import { serializeDates, camelCaseKeys } from "../utils/serialize.js";
 import {
   ListMerchantsResponse,
@@ -14,7 +14,7 @@ import {
   GetMerchantReviewsParams,
   ListMerchantsQueryParams,
   CreateMerchantBody,
-} from "#api-zod";
+} from '../api-zod/index.js';
 import { getSessionId } from "./session.js";
 
 export async function create(req: Request, res: Response): Promise<void> {

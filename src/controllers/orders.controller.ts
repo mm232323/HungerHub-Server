@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { supabase } from "#supabase";
+import { supabase } from '../lib/supabase.js';
 import { serializeDates, camelCaseKeys } from "../utils/serialize.js";
 import {
   ListOrdersResponse,
@@ -10,7 +10,7 @@ import {
   UpdateOrderStatusParams,
   UpdateOrderStatusBody,
   ListOrdersQueryParams,
-} from "#api-zod";
+} from '../api-zod/index.js';
 
 export async function list(req: Request, res: Response): Promise<void> {
   const query = ListOrdersQueryParams.safeParse(req.query);

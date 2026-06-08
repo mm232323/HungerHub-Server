@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { supabase } from "#supabase";
+import { supabase } from '../lib/supabase.js';
 import { getAuth, createClerkClient } from "@clerk/express";
 
 const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY || "" });

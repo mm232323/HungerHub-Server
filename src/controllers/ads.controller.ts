@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
-import { supabase } from "#supabase";
+import { supabase } from '../lib/supabase.js';
 import { serializeDates, camelCaseKeys, snakeCaseKeys } from "../utils/serialize.js";
-import { CreateAdBody, AdResponse, UpdateAdBody } from "#api-zod";
+import { CreateAdBody, AdResponse, UpdateAdBody } from '../api-zod/index.js';
 
 async function getMerchantId(req: Request): Promise<number> {
   const username = req.headers['x-owner-user-name'] as string;
