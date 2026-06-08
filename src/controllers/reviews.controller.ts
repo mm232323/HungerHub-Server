@@ -23,5 +23,25 @@ export async function create(req: Request, res: Response): Promise<void> {
   }
 
   const review = camelCaseKeys(data?.[0]);
+
+  // Update product rating if this is a product review
+  if (parsed.data.productId) {
+    const { data: productReviews } = await supabase
+      .from("reviews")
+      .select("rating")
+      .eq("product_id", parsed.data.productId);
+
+    if (productReviews && productReviews.length > 0) {
+      const total = productReviews.reduce((sum, r) => sum + r.rating, 0);
+      const count = productReviews.length;
+      const newRating = total / count;
+
+      await supabase
+        .from("products")
+        .update({ rating: newRating, review_count: count })
+        .eq("id", parsed.data.productId);
+    }
+  }
+
   res.status(201).json(serializeDates(review));
 }

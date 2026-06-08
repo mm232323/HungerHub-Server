@@ -24,6 +24,7 @@
     "@clerk/express": "^2.1.21",
     "@clerk/shared": "^4.10.2",
     "@supabase/supabase-js": "^2.105.4",
+    "cloudinary": "^2.10.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2",
     "dotenv": "^17.4.2",

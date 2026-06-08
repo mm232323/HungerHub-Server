@@ -21,38 +21,27 @@ import {
 const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY || "" });
 
 async function getMerchantId(req: Request): Promise<number> {
-  const auth = getAuth(req);
-
-  if (!auth?.userId) {
-    throw new Error("Unauthorized");
+  const username = req.headers['x-owner-user-name'] as string;
+  if (!username) {
+    throw new Error("Unauthorized: missing owner username");
   }
 
   try {
-    const user = await clerkClient.users.getUser(auth.userId);
-    const merchantId = user.unsafeMetadata?.merchantId;
-    if (typeof merchantId === 'number') return merchantId;
-
-    let queryBuilder = supabase.from('merchants').select('id');
-    if (user.username) {
-        queryBuilder = queryBuilder.or(`session_id.eq.${auth.userId},owner_user_name.eq.${user.username}`);
-    } else {
-        queryBuilder = queryBuilder.eq('session_id', auth.userId);
-    }
-    const { data: merchants, error } = await queryBuilder.limit(1);
+    const { data: merchants, error } = await supabase
+      .from('merchants')
+      .select('id')
+      .eq('owner_user_name', username)
+      .limit(1);
+    
     const merchant = merchants?.[0];
 
     if (error || !merchant) {
       throw new Error("Not a merchant");
     }
-
-    // Update clerk metadata for future requests
-    await clerkClient.users.updateUser(auth.userId, {
-      unsafeMetadata: { ...user.unsafeMetadata, merchantId: merchant.id, role: 'merchant' }
-    });
     
     return merchant.id;
   } catch (e: any) {
-    if (e.message === "Not a merchant" || e.message === "Unauthorized") {
+    if (e.message === "Not a merchant" || e.message.startsWith("Unauthorized")) {
       throw e;
     }
     throw new Error("Not a merchant");
@@ -243,7 +232,6 @@ export async function createProduct(req: Request, res: Response): Promise<void> 
     return;
   }
 
-  console.log("Creating product for merchant:", merchantId);
 
   const dbData = snakeCaseKeys({
     ...parsed.data,

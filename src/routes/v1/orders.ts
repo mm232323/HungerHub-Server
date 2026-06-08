@@ -8,5 +8,6 @@ router.post("/orders", ordersController.create);
 router.get("/orders/:id", ordersController.getById);
 router.patch("/orders/:id/status", ordersController.updateStatus);
 router.put("/orders/:id/status", ordersController.updateStatus);
+router.post("/orders/validate-promo", ordersController.validatePromo);
 
 export default router;

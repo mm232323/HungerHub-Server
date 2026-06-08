@@ -6,5 +6,6 @@ const router: IRouter = Router();
 router.get("/products/trending", productsController.trending);
 router.get("/products", productsController.list);
 router.get("/products/:id", productsController.getById);
+router.get("/products/:id/reviews", productsController.getReviews);
 
 export default router;

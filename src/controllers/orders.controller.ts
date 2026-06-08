@@ -88,7 +88,37 @@ export async function create(req: Request, res: Response): Promise<void> {
 
   const subtotal = orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const deliveryFee = 2.99;
-  const discount = promoCode ? subtotal * 0.1 : 0;
+  
+  let discount = 0;
+  if (promoCode) {
+    const { data: promotions } = await supabase
+      .from("promotions")
+      .select("*")
+      .eq("code", promoCode)
+      .eq("merchant_id", merchantId)
+      .eq("is_active", true)
+      .limit(1);
+
+    const promotion = promotions?.[0];
+    if (promotion) {
+      const nowTime = new Date().getTime();
+      const startDate = new Date(promotion.start_date).getTime();
+      const endDate = new Date(promotion.end_date).getTime();
+
+      if (nowTime >= startDate && nowTime <= endDate) {
+        if (promotion.type === "percentage") {
+          discount = subtotal * (promotion.discount / 100);
+        } else if (promotion.type === "fixed") {
+          discount = Math.min(promotion.discount, subtotal);
+        } else if (promotion.type === "free_delivery") {
+          discount = deliveryFee;
+        } else if (promotion.type === "bogo") {
+          discount = subtotal * 0.5;
+        }
+      }
+    }
+  }
+
   const total = subtotal + deliveryFee - discount;
 
   const now = new Date();
@@ -231,4 +261,55 @@ export async function updateStatus(req: Request, res: Response): Promise<void> {
       serializeDates({ ...camelOrder, merchantName }),
     ),
   );
+}
+
+export async function validatePromo(req: Request, res: Response): Promise<void> {
+  const { promoCode, merchantId, subtotal } = req.body;
+  
+  if (!promoCode || !merchantId || subtotal == null) {
+    res.status(400).json({ valid: false, message: "Missing required fields" });
+    return;
+  }
+
+  const { data: promotions } = await supabase
+    .from("promotions")
+    .select("*")
+    .eq("code", promoCode)
+    .eq("merchant_id", merchantId)
+    .eq("is_active", true)
+    .limit(1);
+
+  const promotion = promotions?.[0];
+  if (!promotion) {
+    res.status(404).json({ valid: false, message: "Invalid or inactive promo code" });
+    return;
+  }
+
+  const nowTime = new Date().getTime();
+  const startDate = new Date(promotion.start_date).getTime();
+  const endDate = new Date(promotion.end_date).getTime();
+
+  if (nowTime < startDate || nowTime > endDate) {
+    res.status(400).json({ valid: false, message: "Promo code is expired or not yet active" });
+    return;
+  }
+
+  let discount = 0;
+  const deliveryFee = 2.99; // Using standard delivery fee assumption
+
+  if (promotion.type === "percentage") {
+    discount = subtotal * (promotion.discount / 100);
+  } else if (promotion.type === "fixed") {
+    discount = Math.min(promotion.discount, subtotal);
+  } else if (promotion.type === "free_delivery") {
+    discount = deliveryFee;
+  } else if (promotion.type === "bogo") {
+    discount = subtotal * 0.5;
+  }
+
+  res.json({
+    valid: true,
+    discount,
+    message: "Promo code applied successfully!",
+  });
 }

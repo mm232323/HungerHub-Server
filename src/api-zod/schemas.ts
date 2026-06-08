@@ -36,7 +36,7 @@ export const ListMerchantsQueryParams = zod.object({
   search: zod.coerce.string().optional(),
   limit: zod.coerce.number().optional(),
   offset: zod.coerce.number().optional(),
-  ownerUserName: zod.string().optional(),
+  owner_user_name: zod.string().optional(),
 });
 
 export const ListMerchantsResponseItem = zod.object({
@@ -191,6 +191,7 @@ export const ListProductsResponseItem = zod.object({
   id: zod.number(),
   merchantId: zod.number(),
   merchantName: zod.string().nullish(),
+  merchantSlug: zod.string().nullish(),
   name: zod.string(),
   description: zod.string(),
   price: zod.number(),
@@ -218,6 +219,7 @@ export const GetProductResponse = zod.object({
   id: zod.number(),
   merchantId: zod.number(),
   merchantName: zod.string().nullish(),
+  merchantSlug: zod.string().nullish(),
   name: zod.string(),
   description: zod.string(),
   price: zod.number(),
@@ -240,6 +242,7 @@ export const GetTrendingProductsResponseItem = zod.object({
   id: zod.number(),
   merchantId: zod.number(),
   merchantName: zod.string().nullish(),
+  merchantSlug: zod.string().nullish(),
   name: zod.string(),
   description: zod.string(),
   price: zod.number(),
@@ -851,5 +854,109 @@ export const CreateMerchantBody = zod.object({
   profileImage: zod.string().optional(),
   coverImage: zod.string().optional(),
   tags: zod.array(zod.string()).optional(),
-  ownerUserName: zod.string().optional(),
+  owner_user_name: zod.string().optional(),
 });
+
+/**
+ * @summary Create an Ad
+ */
+export const CreateAdBody = zod.object({
+  title: zod.string(),
+  description: zod.string(),
+  img: zod.string(),
+  providedProduct: zod.number().nullish(),
+});
+
+export const AdResponse = zod.object({
+  id: zod.string(),
+  merchantId: zod.number(),
+  title: zod.string(),
+  description: zod.string(),
+  img: zod.string(),
+  providedProduct: zod.number().nullish(),
+  impressions: zod.number().nullish(),
+  clicks: zod.number().nullish(),
+  isActive: zod.boolean().nullish(),
+  startDate: zod.string().nullish(),
+  endDate: zod.string().nullish(),
+  dailyBudget: zod.number().nullish(),
+  createdAt: zod.string().nullish(),
+});
+
+export const UpdateAdBody = zod.object({
+  title: zod.string().optional(),
+  description: zod.string().optional(),
+  img: zod.string().optional(),
+  providedProduct: zod.number().nullish(),
+  isActive: zod.boolean().optional(),
+});
+
+
+export const GetFeedAdsResponseItem = zod.object({
+  id: zod.string(),
+  merchantId: zod.number(),
+  title: zod.string(),
+  description: zod.string(),
+  img: zod.string(),
+  providedProduct: zod.number().nullish(),
+  isActive: zod.boolean().nullish(),
+  createdAt: zod.string().nullish(),
+  merchant: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    slug: zod.string(),
+    profileImage: zod.string(),
+  }).nullish(),
+});
+
+export const GetFeedAdsResponse = zod.array(GetFeedAdsResponseItem);
+
+
+/**
+ * @summary Comments
+ */
+export const CommentFeedPostParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const CommentFeedPostBody = zod.object({
+  content: zod.string(),
+});
+
+export const FeedCommentResponse = zod.object({
+  id: zod.number(),
+  feedPostId: zod.number().optional(),
+  adId: zod.string().optional(),
+  sessionId: zod.string(),
+  content: zod.string(),
+  createdAt: zod.string(),
+});
+
+export const GetFeedPostCommentsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetFeedPostCommentsResponse = zod.array(FeedCommentResponse);
+
+export const LikeFeedAdParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const LikeFeedAdResponse = zod.object({
+  isLiked: zod.boolean(),
+  likes: zod.number(),
+});
+
+export const CommentFeedAdParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const CommentFeedAdBody = zod.object({
+  content: zod.string(),
+});
+
+export const GetFeedAdCommentsParams = zod.object({
+  id: zod.coerce.string(),
+});
+
+export const GetFeedAdCommentsResponse = zod.array(FeedCommentResponse);

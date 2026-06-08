@@ -43,7 +43,7 @@ export async function create(req: Request, res: Response): Promise<void> {
         tags: body.data.tags ?? [],
         rating: 0,
         followers_count: 0,
-        owner_user_name: body.data.ownerUserName,
+        owner_user_name: body.data.owner_user_name,
       },
     ])
     .select("*");
@@ -72,7 +72,7 @@ export async function list(req: Request, res: Response): Promise<void> {
   const category = query.success ? query.data.category : undefined;
   const trending = query.success ? query.data.trending : undefined;
   const search = query.success ? query.data.search : undefined;
-  const ownerUserName = query.success && "ownerUserName" in query.data ? query.data.ownerUserName : undefined;
+  const ownerUserName = query.success && "owner_user_name" in query.data ? query.data.owner_user_name : undefined;
   const limit =
     query.success && query.data.limit ? Number(query.data.limit) : 20;
   const offset =
@@ -140,6 +140,43 @@ export async function trending(_req: Request, res: Response): Promise<void> {
   res.json(GetTrendingMerchantsResponse.parse(serializeDates(result)));
 }
 
+export async function followed(req: Request, res: Response): Promise<void> {
+  const sessionId = getSessionId(req);
+  const { data: follows, error: followsError } = await supabase
+    .from("merchant_follows")
+    .select("merchant_id")
+    .eq("session_id", sessionId);
+
+  if (followsError) {
+    res.status(500).json({ error: followsError.message });
+    return;
+  }
+
+  const followedIds = (follows ?? []).map((f) => f.merchant_id);
+
+  if (followedIds.length === 0) {
+    res.json(ListMerchantsResponse.parse(serializeDates([])));
+    return;
+  }
+
+  const { data: merchants, error } = await supabase
+    .from("merchants")
+    .select("*")
+    .in("id", followedIds);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const result = (merchants ?? []).map((m: Record<string, unknown>) => {
+    const camelMerchant = camelCaseKeys(m) as { id: number };
+    return { ...camelMerchant, isFollowing: true };
+  });
+
+  res.json(ListMerchantsResponse.parse(serializeDates(result)));
+}
+
 export async function getById(req: Request, res: Response): Promise<void> {
   const params = GetMerchantParams.safeParse(req.params);
   if (!params.success) {
@@ -151,6 +188,48 @@ export async function getById(req: Request, res: Response): Promise<void> {
     .from("merchants")
     .select("*")
     .eq("id", params.data.id)
+    .limit(1);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const merchant = merchants?.[0];
+  if (!merchant) {
+    res.status(404).json({ error: "Merchant not found" });
+    return;
+  }
+
+  const sessionId = getSessionId(req);
+  const { data: follows } = await supabase
+    .from("merchant_follows")
+    .select("*")
+    .eq("merchant_id", merchant.id)
+    .eq("session_id", sessionId)
+    .limit(1);
+
+  const isFollowing = (follows ?? []).length > 0;
+  const camelMerchant = camelCaseKeys(merchant);
+
+  res.json(
+    GetMerchantResponse.parse(
+      serializeDates({ ...camelMerchant, isFollowing }),
+    ),
+  );
+}
+
+export async function getBySlug(req: Request, res: Response): Promise<void> {
+  const { slug } = req.params;
+  if (!slug) {
+    res.status(400).json({ error: "Slug is required" });
+    return;
+  }
+
+  const { data: merchants, error } = await supabase
+    .from("merchants")
+    .select("*")
+    .eq("slug", slug)
     .limit(1);
 
   if (error) {
@@ -214,8 +293,9 @@ export async function follow(req: Request, res: Response): Promise<void> {
   let isFollowing: boolean;
   let followersCount: number;
 
+
   if (existing) {
-    await supabase.from("merchant_follows").delete().eq("id", existing.id);
+    const { error: delErr } = await supabase.from("merchant_follows").delete().eq("merchant_id", params.data.id).eq("session_id", sessionId);
     const newCount = Math.max(0, (merchant.followers_count ?? 0) - 1);
     await supabase
       .from("merchants")
@@ -224,7 +304,7 @@ export async function follow(req: Request, res: Response): Promise<void> {
     isFollowing = false;
     followersCount = newCount;
   } else {
-    await supabase
+    const { error: insErr } = await supabase
       .from("merchant_follows")
       .insert({ merchant_id: params.data.id, session_id: sessionId });
     const newCount = (merchant.followers_count ?? 0) + 1;
@@ -248,11 +328,12 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
 
   const { data: merchants } = await supabase
     .from("merchants")
-    .select("name")
+    .select("name, slug")
     .eq("id", params.data.id)
     .limit(1);
 
   const merchantName = merchants?.[0]?.name ?? null;
+  const merchantSlug = merchants?.[0]?.slug ?? null;
 
   const { data: products } = await supabase
     .from("products")
@@ -261,7 +342,7 @@ export async function listProducts(req: Request, res: Response): Promise<void> {
 
   const result = (products ?? []).map((p) => {
     const camelProduct = camelCaseKeys(p);
-    return { ...camelProduct, merchantName };
+    return { ...camelProduct, merchantName, merchantSlug };
   });
 
   res.json(GetMerchantProductsResponse.parse(serializeDates(result)));

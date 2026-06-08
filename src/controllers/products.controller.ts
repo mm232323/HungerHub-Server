@@ -25,7 +25,8 @@ export async function list(req: Request, res: Response): Promise<void> {
   let queryBuilder = supabase.from("products").select(`
       *,
       merchants (
-        name
+        name,
+        slug
       )
     `);
 
@@ -43,11 +44,12 @@ export async function list(req: Request, res: Response): Promise<void> {
 
   const result = (products ?? []).map((p: Record<string, unknown>) => {
     const camelProduct = camelCaseKeys(p) as {
-      merchants?: { name?: string };
+      merchants?: { name?: string; slug?: string };
     };
     const merchantName = camelProduct.merchants?.name ?? null;
+    const merchantSlug = camelProduct.merchants?.slug ?? null;
     const { merchants: _m, ...rest } = camelProduct;
-    return { ...rest, merchantName };
+    return { ...rest, merchantName, merchantSlug };
   });
 
   res.json(ListProductsResponse.parse(serializeDates(result)));
@@ -59,7 +61,8 @@ export async function trending(_req: Request, res: Response): Promise<void> {
     .select(`
       *,
       merchants (
-        name
+        name,
+        slug
       )
     `)
     .eq("is_trending", true)
@@ -72,11 +75,12 @@ export async function trending(_req: Request, res: Response): Promise<void> {
 
   const result = (products ?? []).map((p: Record<string, unknown>) => {
     const camelProduct = camelCaseKeys(p) as {
-      merchants?: { name?: string };
+      merchants?: { name?: string; slug?: string };
     };
     const merchantName = camelProduct.merchants?.name ?? null;
+    const merchantSlug = camelProduct.merchants?.slug ?? null;
     const { merchants: _m, ...rest } = camelProduct;
-    return { ...rest, merchantName };
+    return { ...rest, merchantName, merchantSlug };
   });
 
   res.json(GetTrendingProductsResponse.parse(serializeDates(result)));
@@ -94,7 +98,8 @@ export async function getById(req: Request, res: Response): Promise<void> {
     .select(`
       *,
       merchants (
-        name
+        name,
+        slug
       )
     `)
     .eq("id", params.data.id)
@@ -112,12 +117,36 @@ export async function getById(req: Request, res: Response): Promise<void> {
   }
 
   const camelProduct = camelCaseKeys(product) as {
-    merchants?: { name?: string };
+    merchants?: { name?: string; slug?: string };
   };
   const merchantName = camelProduct.merchants?.name ?? null;
+  const merchantSlug = camelProduct.merchants?.slug ?? null;
   const { merchants: _m, ...rest } = camelProduct;
 
   res.json(
-    GetProductResponse.parse(serializeDates({ ...rest, merchantName })),
+    GetProductResponse.parse(serializeDates({ ...rest, merchantName, merchantSlug })),
   );
+}
+
+export async function getReviews(req: Request, res: Response): Promise<void> {
+  const params = GetProductParams.safeParse(req.params);
+  if (!params.success) {
+    res.status(400).json({ error: params.error.message });
+    return;
+  }
+
+  const { data: reviews, error } = await supabase
+    .from("reviews")
+    .select("*")
+    .eq("product_id", params.data.id)
+    .order("rating", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(3);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  res.json(serializeDates((reviews ?? []).map((r) => camelCaseKeys(r))));
 }

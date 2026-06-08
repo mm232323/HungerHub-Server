@@ -63,7 +63,7 @@ export interface Merchant {
   isFollowing: boolean;
   isTrending?: boolean;
   tags?: string[];
-  ownerUserName?: string;
+  owner_user_name?: string;
 }
 
 export interface CreateMerchantInput {
@@ -77,7 +77,7 @@ export interface CreateMerchantInput {
   profileImage?: string;
   coverImage?: string;
   tags?: string[];
-  ownerUserName?: string;
+  owner_user_name?: string;
 }
 
 
@@ -363,3 +363,81 @@ export interface TopProduct {
   revenue: number;
   rank: number;
 }
+
+export interface CreateAdInput {
+  title: string;
+  description: string;
+  img: string;
+  providedProduct?: number | null;
+}
+
+export interface Ad {
+  id: string;
+  merchantId: number;
+  title: string;
+  description: string;
+  img: string;
+  providedProduct?: number | null;
+  impressions?: number | null;
+  clicks?: number | null;
+  isActive?: boolean | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  dailyBudget?: number | null;
+  createdAt?: string | null;
+}
+
+export interface UpdateAdInput {
+  title?: string;
+  description?: string;
+  img?: string;
+  providedProduct?: number | null;
+  isActive?: boolean;
+}
+
+
+export interface CommentFeedPostParams {
+  id: number;
+}
+
+export interface CommentFeedPostBody {
+  content: string;
+}
+
+export interface FeedCommentResponse {
+  id: number;
+  feedPostId?: number;
+  adId?: string;
+  sessionId: string;
+  content: string;
+  createdAt: string;
+}
+
+export type GetFeedPostCommentsParams = {
+  id: number;
+};
+
+export type GetFeedPostCommentsResponse = FeedCommentResponse[];
+
+export interface LikeFeedAdParams {
+  id: string;
+}
+
+export interface LikeFeedAdResponse {
+  isLiked: boolean;
+  likes: number;
+}
+
+export interface CommentFeedAdParams {
+  id: string;
+}
+
+export interface CommentFeedAdBody {
+  content: string;
+}
+
+export type GetFeedAdCommentsParams = {
+  id: string;
+};
+
+export type GetFeedAdCommentsResponse = FeedCommentResponse[];

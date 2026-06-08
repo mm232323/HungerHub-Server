@@ -9,6 +9,8 @@ import reviewsRouter from "./v1/reviews";
 import searchRouter from "./v1/search";
 import dashboardRouter from "./v1/dashboard";
 import usersRouter from "./v1/users";
+import adsRouter from "./v1/ads";
+import uploadRouter from "./v1/upload";
 
 const router: IRouter = Router();
 const version = `/${process.env.API_VERSION || "v1"}`;
@@ -22,5 +24,7 @@ router.use(version, reviewsRouter);
 router.use(version, searchRouter);
 router.use(version, dashboardRouter);
 router.use(version, usersRouter);
+router.use(version, adsRouter);
+router.use(version, uploadRouter);
 
 export default router;
