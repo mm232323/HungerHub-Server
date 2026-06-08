@@ -915,15 +915,15 @@ export const GetFeedAdsResponse = zod.array(GetFeedAdsResponseItem);
 /**
  * @summary Comments
  */
-export const CommentFeedPostParams = zod.object({
+export const CommentFeedPostParamsSchema = zod.object({
   id: zod.coerce.number(),
 });
 
-export const CommentFeedPostBody = zod.object({
+export const CommentFeedPostBodySchema = zod.object({
   content: zod.string(),
 });
 
-export const FeedCommentResponse = zod.object({
+export const FeedCommentResponseSchema = zod.object({
   id: zod.number(),
   feedPostId: zod.number().optional(),
   adId: zod.string().optional(),
@@ -932,31 +932,31 @@ export const FeedCommentResponse = zod.object({
   createdAt: zod.string(),
 });
 
-export const GetFeedPostCommentsParams = zod.object({
+export const GetFeedPostCommentsParamsSchema = zod.object({
   id: zod.coerce.number(),
 });
 
-export const GetFeedPostCommentsResponse = zod.array(FeedCommentResponse);
+export const GetFeedPostCommentsResponseSchema = zod.array(FeedCommentResponseSchema);
 
-export const LikeFeedAdParams = zod.object({
+export const LikeFeedAdParamsSchema = zod.object({
   id: zod.coerce.string(),
 });
 
-export const LikeFeedAdResponse = zod.object({
+export const LikeFeedAdResponseSchema = zod.object({
   isLiked: zod.boolean(),
   likes: zod.number(),
 });
 
-export const CommentFeedAdParams = zod.object({
+export const CommentFeedAdParamsSchema = zod.object({
   id: zod.coerce.string(),
 });
 
-export const CommentFeedAdBody = zod.object({
+export const CommentFeedAdBodySchema = zod.object({
   content: zod.string(),
 });
 
-export const GetFeedAdCommentsParams = zod.object({
+export const GetFeedAdCommentsParamsSchema = zod.object({
   id: zod.coerce.string(),
 });
 
-export const GetFeedAdCommentsResponse = zod.array(FeedCommentResponse);
+export const GetFeedAdCommentsResponseSchema = zod.array(FeedCommentResponseSchema);
