@@ -65,7 +65,8 @@ export async function trending(_req: Request, res: Response): Promise<void> {
         slug
       )
     `)
-    .eq("is_trending", true)
+    .order("rating", { ascending: false, nullsFirst: false })
+    .order("review_count", { ascending: false, nullsFirst: false })
     .limit(10);
 
   if (error) {

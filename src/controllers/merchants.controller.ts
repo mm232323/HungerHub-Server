@@ -37,6 +37,7 @@ export async function create(req: Request, res: Response): Promise<void> {
         delivery_time: body.data.deliveryTime,
         delivery_fee: body.data.deliveryFee,
         address: body.data.address,
+        country: body.data.country,
         is_open: body.data.isOpen ?? false,
         profile_image: body.data.profileImage ?? "https://picsum.photos/400/400",
         cover_image: body.data.coverImage ?? "https://picsum.photos/1200/400",

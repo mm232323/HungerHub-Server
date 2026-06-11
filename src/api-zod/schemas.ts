@@ -20,6 +20,7 @@ export const HealthCheckResponse = zod.object({
 export const ListCategoriesResponseItem = zod.object({
   id: zod.number(),
   name: zod.string(),
+  name_ar: zod.string().nullish(),
   slug: zod.string(),
   icon: zod.string(),
   image: zod.string().nullish(),
@@ -850,6 +851,7 @@ export const CreateMerchantBody = zod.object({
   deliveryTime: zod.string(),
   deliveryFee: zod.number(),
   address: zod.string(),
+  country: zod.string(),
   isOpen: zod.boolean().optional(),
   profileImage: zod.string().optional(),
   coverImage: zod.string().optional(),
