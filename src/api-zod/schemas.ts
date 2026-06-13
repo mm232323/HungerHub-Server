@@ -86,6 +86,15 @@ export const GetMerchantResponse = zod.object({
   isFollowing: zod.boolean(),
   isTrending: zod.boolean().optional(),
   tags: zod.array(zod.string()).optional(),
+  phone: zod.string().nullish(),
+  email: zod.string().nullish(),
+  website: zod.string().nullish(),
+  facebook: zod.string().nullish(),
+  instagram: zod.string().nullish(),
+  twitter: zod.string().nullish(),
+  youtube: zod.string().nullish(),
+  openingHours: zod.any().nullish(),
+  additionalShowed: zod.string().nullish(),
 });
 
 /**
@@ -741,25 +750,6 @@ export const UpdateProductBody = zod.object({
   instagramUrl: zod.string().nullish(),
 });
 
-export const UpdateProductResponse = zod.object({
-  id: zod.number(),
-  merchantId: zod.number(),
-  merchantName: zod.string().nullish(),
-  name: zod.string(),
-  description: zod.string(),
-  price: zod.number(),
-  discountPrice: zod.number().nullish(),
-  image: zod.string(),
-  category: zod.string(),
-  isAvailable: zod.boolean(),
-  stock: zod.number().nullish(),
-  ingredients: zod.array(zod.string()).optional(),
-  nutritionalInfo: zod.string().nullish(),
-  isTrending: zod.boolean().optional(),
-  rating: zod.number().nullish(),
-  reviewCount: zod.number().nullish(),
-});
-
 /**
  * @summary Delete a product
  */
@@ -894,71 +884,5 @@ export const UpdateAdBody = zod.object({
 });
 
 
-export const GetFeedAdsResponseItem = zod.object({
-  id: zod.string(),
-  merchantId: zod.number(),
-  title: zod.string(),
-  description: zod.string(),
-  img: zod.string(),
-  providedProduct: zod.number().nullish(),
-  isActive: zod.boolean().nullish(),
-  createdAt: zod.string().nullish(),
-  merchant: zod.object({
-    id: zod.number(),
-    name: zod.string(),
-    slug: zod.string(),
-    profileImage: zod.string(),
-  }).nullish(),
-});
-
-export const GetFeedAdsResponse = zod.array(GetFeedAdsResponseItem);
 
 
-/**
- * @summary Comments
- */
-export const CommentFeedPostParamsSchema = zod.object({
-  id: zod.coerce.number(),
-});
-
-export const CommentFeedPostBodySchema = zod.object({
-  content: zod.string(),
-});
-
-export const FeedCommentResponseSchema = zod.object({
-  id: zod.number(),
-  feedPostId: zod.number().optional(),
-  adId: zod.string().optional(),
-  sessionId: zod.string(),
-  content: zod.string(),
-  createdAt: zod.string(),
-});
-
-export const GetFeedPostCommentsParamsSchema = zod.object({
-  id: zod.coerce.number(),
-});
-
-export const GetFeedPostCommentsResponseSchema = zod.array(FeedCommentResponseSchema);
-
-export const LikeFeedAdParamsSchema = zod.object({
-  id: zod.coerce.string(),
-});
-
-export const LikeFeedAdResponseSchema = zod.object({
-  isLiked: zod.boolean(),
-  likes: zod.number(),
-});
-
-export const CommentFeedAdParamsSchema = zod.object({
-  id: zod.coerce.string(),
-});
-
-export const CommentFeedAdBodySchema = zod.object({
-  content: zod.string(),
-});
-
-export const GetFeedAdCommentsParamsSchema = zod.object({
-  id: zod.coerce.string(),
-});
-
-export const GetFeedAdCommentsResponseSchema = zod.array(FeedCommentResponseSchema);

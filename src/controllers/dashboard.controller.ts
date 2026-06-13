@@ -574,6 +574,15 @@ const UpdateProfileSchema = z.object({
   profileImage: z.string().optional(),
   coverImage: z.string().optional(),
   tags: z.array(z.string()).optional(),
+  phone: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
+  website: z.string().nullable().optional(),
+  facebook: z.string().nullable().optional(),
+  instagram: z.string().nullable().optional(),
+  twitter: z.string().nullable().optional(),
+  youtube: z.string().nullable().optional(),
+  openingHours: z.any().nullable().optional(),
+  additionalShowed: z.string().nullable().optional(),
 });
 
 export async function updateProfile(req: Request, res: Response): Promise<void> {
@@ -593,6 +602,7 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
     .single();
 
   if (error || !data) {
+    console.error("Supabase update error:", error);
     res.status(500).json({ error: error?.message || "Failed to update profile" });
     return;
   }
