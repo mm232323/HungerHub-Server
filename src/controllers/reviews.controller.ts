@@ -43,5 +43,23 @@ export async function create(req: Request, res: Response): Promise<void> {
     }
   }
 
+  if (parsed.data.merchantId) {
+    const { data: merchantReviews } = await supabase
+      .from("reviews")
+      .select("rating")
+      .eq("merchant_id", parsed.data.merchantId);
+
+    if (merchantReviews && merchantReviews.length > 0) {
+      const total = merchantReviews.reduce((sum, r) => sum + r.rating, 0);
+      const count = merchantReviews.length;
+      const newRating = total / count;
+
+      await supabase
+        .from("merchants")
+        .update({ rating: newRating })
+        .eq("id", parsed.data.merchantId);
+    }
+  }
+
   res.status(201).json(serializeDates(review));
 }
