@@ -38,6 +38,9 @@ export const ListMerchantsQueryParams = zod.object({
   limit: zod.coerce.number().optional(),
   offset: zod.coerce.number().optional(),
   owner_user_name: zod.string().optional(),
+  lat: zod.coerce.number().optional(),
+  lng: zod.coerce.number().optional(),
+  radius: zod.coerce.number().optional(),
 });
 
 export const ListMerchantsResponseItem = zod.object({
@@ -58,6 +61,8 @@ export const ListMerchantsResponseItem = zod.object({
   isFollowing: zod.boolean(),
   isTrending: zod.boolean().optional(),
   tags: zod.array(zod.string()).optional(),
+  latitude: zod.number().nullish(),
+  longitude: zod.number().nullish(),
 });
 export const ListMerchantsResponse = zod.array(ListMerchantsResponseItem);
 
@@ -433,6 +438,8 @@ export const CreateOrderBody = zod.object({
   paymentMethod: zod.string(),
   promoCode: zod.string().nullish(),
   notes: zod.string().nullish(),
+  customerName: zod.string().optional(),
+  customerPhone: zod.string().optional(),
 });
 
 /**
@@ -765,6 +772,9 @@ export const GetCustomerAnalyticsResponse = zod.object({
   repeatBuyerRate: zod.number(),
   totalCustomers: zod.number(),
   newCustomers: zod.number(),
+  organicTrafficPercentage: zod.number().optional(),
+  socialTrafficPercentage: zod.number().optional(),
+  retentionDelta: zod.number().optional(),
   topOrderTimes: zod.array(
     zod.object({
       hour: zod.number(),
@@ -847,6 +857,8 @@ export const CreateMerchantBody = zod.object({
   coverImage: zod.string().optional(),
   tags: zod.array(zod.string()).optional(),
   owner_user_name: zod.string().optional(),
+  latitude: zod.number().optional(),
+  longitude: zod.number().optional(),
 });
 
 /**

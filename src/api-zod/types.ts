@@ -28,6 +28,9 @@ export interface CustomerAnalytics {
   repeatBuyerRate: number;
   totalCustomers: number;
   newCustomers: number;
+  organicTrafficPercentage?: number;
+  socialTrafficPercentage?: number;
+  retentionDelta?: number;
   topOrderTimes: CustomerAnalyticsTopOrderTimesItem[];
   orderHeatmap: CustomerAnalyticsOrderHeatmapItem[];
   demographics?: CustomerAnalyticsDemographicsItem[];
@@ -209,6 +212,8 @@ export interface OrderInput {
   paymentMethod: string;
   promoCode?: string | null;
   notes?: string | null;
+  customerName?: string;
+  customerPhone?: string;
 }
 
 export type OrderStatusUpdateStatus =

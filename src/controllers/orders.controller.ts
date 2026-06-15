@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { getAuth } from "@clerk/express";
 import { supabase } from '../lib/supabase.js';
 import { serializeDates, camelCaseKeys } from "../utils/serialize.js";
 import {
@@ -30,8 +31,32 @@ export async function list(req: Request, res: Response): Promise<void> {
     `)
     .order("created_at", { ascending: true });
 
+  const auth = getAuth(req);
+  const clerkUserId = auth?.userId;
+  let numericUserId: number | null = null;
+
+  if (clerkUserId) {
+    const { data: user } = await supabase
+      .from("users")
+      .select("id")
+      .eq("clerk_id", clerkUserId)
+      .single();
+    if (user) {
+      numericUserId = user.id;
+    }
+  }
+
   if (status) queryBuilder = queryBuilder.eq("status", status);
   if (merchantId) queryBuilder = queryBuilder.eq("merchant_id", merchantId);
+
+  if (!merchantId) {
+    if (numericUserId) {
+      queryBuilder = queryBuilder.eq("customer_id", numericUserId);
+    } else {
+      res.json(ListOrdersResponse.parse(serializeDates([])));
+      return;
+    }
+  }
 
   const { data: orders, error } = await queryBuilder;
   if (error) {
@@ -54,6 +79,34 @@ export async function create(req: Request, res: Response): Promise<void> {
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
+  }
+
+  const auth = getAuth(req);
+  const clerkUserId = auth?.userId;
+  let numericUserId: number | null = null;
+
+  if (clerkUserId) {
+    let { data: user } = await supabase
+      .from("users")
+      .select("id")
+      .eq("clerk_id", clerkUserId)
+      .single();
+
+    if (!user) {
+      const { data: newUser } = await supabase
+        .from("users")
+        .insert({
+          clerk_id: clerkUserId,
+          username: parsed.data.customerName || ("user_" + clerkUserId.substring(0, 5)),
+        })
+        .select("id")
+        .single();
+      user = newUser;
+    }
+
+    if (user) {
+      numericUserId = user.id;
+    }
   }
 
   const { merchantId, items, address, paymentMethod, promoCode, notes } =
@@ -90,6 +143,7 @@ export async function create(req: Request, res: Response): Promise<void> {
   const deliveryFee = 2.99;
   
   let discount = 0;
+  let appliedPromotion: any = null;
   if (promoCode) {
     const { data: promotions } = await supabase
       .from("promotions")
@@ -114,6 +168,9 @@ export async function create(req: Request, res: Response): Promise<void> {
           discount = deliveryFee;
         } else if (promotion.type === "bogo") {
           discount = subtotal * 0.5;
+        }
+        if (discount > 0) {
+          appliedPromotion = promotion;
         }
       }
     }
@@ -141,9 +198,9 @@ export async function create(req: Request, res: Response): Promise<void> {
     driver_name: null,
     driver_phone: null,
     notes: notes ?? null,
-    customer_name: "Guest User",
-    customer_phone: null,
-    customer_id: null,
+    customer_name: parsed.data.customerName || "Guest User",
+    customer_phone: parsed.data.customerPhone || null,
+    customer_id: numericUserId || null,
   };
 
   const { data: newOrders, error: insertError } = await supabase
@@ -155,6 +212,13 @@ export async function create(req: Request, res: Response): Promise<void> {
   if (insertError) {
     res.status(500).json({ error: insertError.message });
     return;
+  }
+
+  if (appliedPromotion) {
+    await supabase
+      .from("promotions")
+      .update({ usage_count: (appliedPromotion.usage_count || 0) + 1 })
+      .eq("id", appliedPromotion.id);
   }
 
   const order = camelCaseKeys(newOrders?.[0]);

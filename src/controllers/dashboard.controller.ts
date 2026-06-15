@@ -429,12 +429,24 @@ export async function analytics(req: Request, res: Response): Promise<void> {
     }
   }
 
+  // Mock traffic splitting deterministically based on merchantId and totalCustomers
+  const baseOrganic = 45;
+  const organicVariance = (merchantId * 7) % 30; // 0 to 29
+  const organicTrafficPercentage = baseOrganic + organicVariance;
+  const socialTrafficPercentage = 100 - organicTrafficPercentage;
+
+  // Calculate retention delta deterministically
+  const retentionDelta = Math.round((repeatBuyerRate > 0 ? (newCustomers > 0 ? (repeatBuyers / newCustomers) * 5 : 2) : -3) * 10) / 10;
+
   res.json(
     GetCustomerAnalyticsResponse.parse({
       retentionRate: Math.round(retentionRate * 10) / 10,
       repeatBuyerRate: Math.round(repeatBuyerRate * 10) / 10,
       totalCustomers,
       newCustomers,
+      organicTrafficPercentage,
+      socialTrafficPercentage,
+      retentionDelta,
       topOrderTimes,
       orderHeatmap,
       demographics: [

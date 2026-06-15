@@ -45,6 +45,8 @@ export async function create(req: Request, res: Response): Promise<void> {
         rating: 0,
         followers_count: 0,
         owner_user_name: body.data.owner_user_name,
+        latitude: (body.data as any).latitude ?? null,
+        longitude: (body.data as any).longitude ?? null,
       },
     ])
     .select("*");
@@ -79,14 +81,25 @@ export async function list(req: Request, res: Response): Promise<void> {
   const offset =
     query.success && query.data.offset ? Number(query.data.offset) : 0;
 
-  let queryBuilder = supabase.from("merchants").select("*");
+  const lat = query.success ? query.data.lat : undefined;
+  const lng = query.success ? query.data.lng : undefined;
 
-  if (category) queryBuilder = queryBuilder.eq("cuisine_type", category);
-  if (trending) queryBuilder = queryBuilder.eq("is_trending", true);
-  if (search) queryBuilder = queryBuilder.ilike("name", `%${search}%`);
-  if (ownerUserName) queryBuilder = queryBuilder.eq("owner_user_name", ownerUserName);
+  let queryBuilder;
 
-  queryBuilder = queryBuilder.range(offset, offset + limit - 1);
+  if (lat !== undefined && lng !== undefined) {
+    queryBuilder = supabase.rpc('get_nearby_merchants', { user_lat: lat, user_lng: lng, radius_km: 50, limit_count: limit });
+    if (category) queryBuilder = queryBuilder.eq("cuisine_type", category);
+    if (trending) queryBuilder = queryBuilder.eq("is_trending", true);
+    if (search) queryBuilder = queryBuilder.ilike("name", `%${search}%`);
+    if (ownerUserName) queryBuilder = queryBuilder.eq("owner_user_name", ownerUserName);
+  } else {
+    queryBuilder = supabase.from("merchants").select("*");
+    if (category) queryBuilder = queryBuilder.eq("cuisine_type", category);
+    if (trending) queryBuilder = queryBuilder.eq("is_trending", true);
+    if (search) queryBuilder = queryBuilder.ilike("name", `%${search}%`);
+    if (ownerUserName) queryBuilder = queryBuilder.eq("owner_user_name", ownerUserName);
+    queryBuilder = queryBuilder.range(offset, offset + limit - 1);
+  }
 
   const { data: merchants, error } = await queryBuilder;
   if (error) {
@@ -112,18 +125,32 @@ export async function list(req: Request, res: Response): Promise<void> {
   res.json(ListMerchantsResponse.parse(serializeDates(result)));
 }
 
-export async function trending(_req: Request, res: Response): Promise<void> {
-  const { data: merchants, error } = await supabase
-    .from("merchants")
-    .select("*")
-    .eq("is_featured", true)
-    .limit(10);
+export async function trending(req: Request, res: Response): Promise<void> {
+  const query = ListMerchantsQueryParams.safeParse(req.query);
+  const lat = query.success ? query.data.lat : undefined;
+  const lng = query.success ? query.data.lng : undefined;
+
+  let merchantsQuery;
+
+  if (lat !== undefined && lng !== undefined) {
+    merchantsQuery = supabase
+      .rpc('get_nearby_merchants', { user_lat: lat, user_lng: lng, radius_km: 50, limit_count: 10 });
+  } else {
+    merchantsQuery = supabase
+      .from("merchants")
+      .select("*")
+      .order("followers_count", { ascending: false })
+      .order("rating", { ascending: false })
+      .limit(10);
+  }
+
+  const { data: merchants, error } = await merchantsQuery;
   if (error) {
     res.status(500).json({ error: error.message });
     return;
   }
 
-  const sessionId = getSessionId(_req);
+  const sessionId = getSessionId(req);
   const { data: follows } = await supabase
     .from("merchant_follows")
     .select("*")
