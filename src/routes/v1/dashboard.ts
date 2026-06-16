@@ -19,5 +19,6 @@ router.get("/dashboard/analytics", dashboardController.analytics);
 router.get("/dashboard/top-products", dashboardController.topProducts);
 router.get("/dashboard/promotions", dashboardController.listPromotions);
 router.post("/dashboard/promotions", dashboardController.createPromotion);
+router.patch("/dashboard/promotions/:id", dashboardController.updatePromotion);
 
 export default router;

@@ -20,11 +20,14 @@ import { getSessionId } from "./session.js";
 export async function create(req: Request, res: Response): Promise<void> {
   const body = CreateMerchantBody.safeParse(req.body);
   if (!body.success) {
+    require('fs').appendFileSync('error.log', new Date().toISOString() + ' Zod Error: ' + body.error.message + '\nBody: ' + JSON.stringify(req.body) + '\n');
     res.status(400).json({ error: body.error.message });
     return;
   }
 
-  const slug = body.data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  let baseSlug = body.data.name.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, '');
+  if (!baseSlug) baseSlug = `store-${Date.now()}`;
+  const slug = `${baseSlug}-${Math.random().toString(36).substring(2, 8)}`;
 
   const { data: merchants, error } = await supabase
     .from("merchants")
@@ -37,7 +40,7 @@ export async function create(req: Request, res: Response): Promise<void> {
         delivery_time: body.data.deliveryTime,
         delivery_fee: body.data.deliveryFee,
         address: body.data.address,
-        country: body.data.country,
+        country: body.data.country || "Unknown",
         is_open: body.data.isOpen ?? false,
         profile_image: body.data.profileImage ?? "https://picsum.photos/400/400",
         cover_image: body.data.coverImage ?? "https://picsum.photos/1200/400",
@@ -52,6 +55,12 @@ export async function create(req: Request, res: Response): Promise<void> {
     .select("*");
 
   if (error) {
+    require('fs').appendFileSync('error.log', new Date().toISOString() + ' Supabase Error: ' + JSON.stringify(error) + '\n');
+    if (error.code === '23505') {
+      res.status(400).json({ error: "Duplicate constraint violated: " + error.message });
+      return;
+    }
+    console.error("Supabase insert error:", error);
     res.status(500).json({ error: error.message });
     return;
   }

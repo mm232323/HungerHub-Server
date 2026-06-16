@@ -841,6 +841,16 @@ export const CreatePromotionBody = zod.object({
   isActive: zod.boolean().optional(),
 });
 
+export const UpdatePromotionBody = zod.object({
+  title: zod.string().optional(),
+  type: zod.enum(["percentage", "fixed", "free_delivery", "bogo"]).optional(),
+  discount: zod.number().optional(),
+  code: zod.string().nullish(),
+  startDate: zod.string().optional(),
+  endDate: zod.string().optional(),
+  isActive: zod.boolean().optional(),
+});
+
 /**
  * @summary Create a merchant
  */

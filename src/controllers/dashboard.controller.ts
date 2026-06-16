@@ -15,6 +15,7 @@ import {
   GetTopProductsResponse,
   ListPromotionsResponse,
   CreatePromotionBody,
+  UpdatePromotionBody,
   GetDashboardOrdersQueryParams,
 } from '../api-zod/index.js';
 
@@ -78,20 +79,54 @@ export async function stats(req: Request, res: Response): Promise<void> {
       o.status === "preparing" ||
       o.status === "confirmed",
   );
-  const totalRevenue = camelOrders.reduce(
+  const deliveredOrders = camelOrders.filter((o: any) => o.status === "delivered");
+  const deliveredTodayOrders = todayOrders.filter((o: any) => o.status === "delivered");
+
+  const totalRevenue = deliveredOrders.reduce(
     (sum: number, o: { total?: number }) => sum + (o.total ?? 0),
     0,
   );
-  const todayRevenue = todayOrders.reduce(
+  const todayRevenue = deliveredTodayOrders.reduce(
     (sum: number, o: { total?: number }) => sum + (o.total ?? 0),
     0,
   );
   const avgOrderValue =
-    camelOrders.length > 0 ? totalRevenue / camelOrders.length : 0;
+    deliveredOrders.length > 0 ? totalRevenue / deliveredOrders.length : 0;
 
   const uniqueCustomers = new Set(
-    camelOrders.map((o: { customerName?: string }) => o.customerName),
+    deliveredOrders.map((o: { customerName?: string }) => o.customerName),
   ).size;
+
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  const thisMonthRevenue = deliveredOrders
+    .filter((o: any) => new Date(o.createdAt) >= thirtyDaysAgo)
+    .reduce((sum: number, o: any) => sum + (o.total ?? 0), 0);
+  const lastMonthRevenue = deliveredOrders
+    .filter((o: any) => new Date(o.createdAt) >= sixtyDaysAgo && new Date(o.createdAt) < thirtyDaysAgo)
+    .reduce((sum: number, o: any) => sum + (o.total ?? 0), 0);
+  const growthRate = lastMonthRevenue === 0 
+    ? (thisMonthRevenue > 0 ? 100 : 0) 
+    : ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100;
+
+  const customerFirstOrderDate = new Map<string, Date>();
+  for (const order of deliveredOrders) {
+    const customerName = order.customerName || 'Guest User';
+    const orderDate = new Date(order.createdAt);
+    if (!customerFirstOrderDate.has(customerName) || orderDate < customerFirstOrderDate.get(customerName)!) {
+      customerFirstOrderDate.set(customerName, orderDate);
+    }
+  }
+
+  let newCustomersThisWeek = 0;
+  for (const firstDate of customerFirstOrderDate.values()) {
+    if (firstDate >= sevenDaysAgo) {
+      newCustomersThisWeek++;
+    }
+  }
 
   res.json(
     GetDashboardStatsResponse.parse({
@@ -101,9 +136,9 @@ export async function stats(req: Request, res: Response): Promise<void> {
       pendingOrders: pendingOrders.length,
       totalOrders: camelOrders.length,
       totalCustomers: uniqueCustomers,
-      newCustomersThisWeek: Math.min(uniqueCustomers, 12),
+      newCustomersThisWeek,
       avgOrderValue,
-      growthRate: 18.5,
+      growthRate: Math.round(growthRate * 10) / 10,
     }),
   );
 }
@@ -119,7 +154,7 @@ export async function revenueChart(
   
   const { data: orders, error } = await supabase
     .from("orders")
-    .select("created_at, total")
+    .select("created_at, total, status")
     .eq("merchant_id", merchantId)
     .gte("created_at", thirtyDaysAgo.toISOString());
 
@@ -128,7 +163,7 @@ export async function revenueChart(
     return;
   }
 
-  const camelOrders = camelCaseKeys(orders ?? []);
+  const camelOrders = camelCaseKeys(orders ?? []).filter((o: any) => o.status === "delivered");
   
   const dataMap = new Map<string, { revenue: number; orders: number }>();
   
@@ -356,7 +391,7 @@ export async function analytics(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const camelOrders = camelCaseKeys(orders ?? []);
+  const camelOrders = camelCaseKeys(orders ?? []).filter((o: any) => o.status === "delivered");
   
   const customerOrderCounts = new Map<string, number>();
   let totalCustomers = 0;
@@ -429,14 +464,47 @@ export async function analytics(req: Request, res: Response): Promise<void> {
     }
   }
 
-  // Mock traffic splitting deterministically based on merchantId and totalCustomers
+  const sixtyDaysAgo = new Date(thirtyDaysAgo.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const customerCountsThisMonth = new Map<string, number>();
+  const customerCountsLastMonth = new Map<string, number>();
+
+  for (const order of camelOrders) {
+    if (!order.createdAt) continue;
+    const orderDate = new Date(order.createdAt as string);
+    const customer = (order.customerName as string) || "Guest User";
+
+    if (orderDate >= thirtyDaysAgo) {
+      customerCountsThisMonth.set(customer, (customerCountsThisMonth.get(customer) || 0) + 1);
+    } else if (orderDate >= sixtyDaysAgo && orderDate < thirtyDaysAgo) {
+      customerCountsLastMonth.set(customer, (customerCountsLastMonth.get(customer) || 0) + 1);
+    }
+  }
+
+  let repeatBuyersThisMonth = 0;
+  let repeatBuyersLastMonth = 0;
+  
+  for (const count of customerCountsThisMonth.values()) {
+    if (count > 1) repeatBuyersThisMonth++;
+  }
+  for (const count of customerCountsLastMonth.values()) {
+    if (count > 1) repeatBuyersLastMonth++;
+  }
+
+  const totalCustomersThisMonth = customerCountsThisMonth.size;
+  const totalCustomersLastMonth = customerCountsLastMonth.size;
+
+  const repeatRateThisMonth = totalCustomersThisMonth > 0 ? (repeatBuyersThisMonth / totalCustomersThisMonth) * 100 : 0;
+  const repeatRateLastMonth = totalCustomersLastMonth > 0 ? (repeatBuyersLastMonth / totalCustomersLastMonth) * 100 : 0;
+
+  const retentionDelta = repeatRateLastMonth === 0 
+    ? (repeatRateThisMonth > 0 ? 100 : 0)
+    : repeatRateThisMonth - repeatRateLastMonth;
+
+  // Traffic and demographics remain deterministic due to lack of source tracking in DB
   const baseOrganic = 45;
   const organicVariance = (merchantId * 7) % 30; // 0 to 29
   const organicTrafficPercentage = baseOrganic + organicVariance;
   const socialTrafficPercentage = 100 - organicTrafficPercentage;
-
-  // Calculate retention delta deterministically
-  const retentionDelta = Math.round((repeatBuyerRate > 0 ? (newCustomers > 0 ? (repeatBuyers / newCustomers) * 5 : 2) : -3) * 10) / 10;
 
   res.json(
     GetCustomerAnalyticsResponse.parse({
@@ -446,7 +514,7 @@ export async function analytics(req: Request, res: Response): Promise<void> {
       newCustomers,
       organicTrafficPercentage,
       socialTrafficPercentage,
-      retentionDelta,
+      retentionDelta: Math.round(retentionDelta * 10) / 10,
       topOrderTimes,
       orderHeatmap,
       demographics: [
@@ -464,7 +532,7 @@ export async function topProducts(req: Request, res: Response): Promise<void> {
   
   const { data: orders, error: ordersError } = await supabase
     .from("orders")
-    .select("items")
+    .select("items, status")
     .eq("merchant_id", merchantId);
 
   if (ordersError) {
@@ -472,7 +540,7 @@ export async function topProducts(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const camelOrders = camelCaseKeys(orders ?? []);
+  const camelOrders = camelCaseKeys(orders ?? []).filter((o: any) => o.status === "delivered");
   const productStats = new Map<number, { totalSold: number; revenue: number; name: string; image: string | null }>();
 
   for (const order of camelOrders) {
@@ -555,6 +623,44 @@ export async function createPromotion(
 
   const promotion = camelCaseKeys(data?.[0]);
   res.status(201).json(serializeDates(promotion));
+}
+
+export async function updatePromotion(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const merchantId = await getMerchantId(req);
+  const promotionId = req.params.id;
+  const parsed = UpdatePromotionBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const dbData = snakeCaseKeys({
+    ...parsed.data,
+  });
+
+  const { data, error } = await supabase
+    .from("promotions")
+    .update(dbData)
+    .eq("id", promotionId)
+    .eq("merchant_id", merchantId)
+    .select()
+    .limit(1);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    res.status(404).json({ error: "Promotion not found" });
+    return;
+  }
+
+  const promotion = camelCaseKeys(data?.[0]);
+  res.json(serializeDates(promotion));
 }
 
 import * as z from "zod";
