@@ -1,7 +1,11 @@
 import type { Request, Response } from "express";
-import { supabase } from '../lib/supabase.js';
+import { supabase } from "../lib/supabase.js";
 import { getAuth, createClerkClient } from "@clerk/express";
-import { serializeDates, camelCaseKeys, snakeCaseKeys } from "../utils/serialize.js";
+import {
+  serializeDates,
+  camelCaseKeys,
+  snakeCaseKeys,
+} from "../utils/serialize.js";
 import {
   GetDashboardStatsResponse,
   GetRevenueChartResponse,
@@ -17,32 +21,37 @@ import {
   CreatePromotionBody,
   UpdatePromotionBody,
   GetDashboardOrdersQueryParams,
-} from '../api-zod/index.js';
+} from "../api-zod/index.js";
 
-const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY || "" });
+const clerkClient = createClerkClient({
+  secretKey: process.env.CLERK_SECRET_KEY || "",
+});
 
 async function getMerchantId(req: Request): Promise<number> {
-  const username = req.headers['x-owner-user-name'] as string;
+  const username = req.headers["x-owner-user-name"] as string;
   if (!username) {
     throw new Error("Unauthorized: missing owner username");
   }
 
   try {
     const { data: merchants, error } = await supabase
-      .from('merchants')
-      .select('id')
-      .eq('owner_user_name', username)
+      .from("merchants")
+      .select("id")
+      .eq("owner_user_name", username)
       .limit(1);
-    
+
     const merchant = merchants?.[0];
 
     if (error || !merchant) {
       throw new Error("Not a merchant");
     }
-    
+
     return merchant.id;
   } catch (e: any) {
-    if (e.message === "Not a merchant" || e.message.startsWith("Unauthorized")) {
+    if (
+      e.message === "Not a merchant" ||
+      e.message.startsWith("Unauthorized")
+    ) {
       throw e;
     }
     throw new Error("Not a merchant");
@@ -79,8 +88,12 @@ export async function stats(req: Request, res: Response): Promise<void> {
       o.status === "preparing" ||
       o.status === "confirmed",
   );
-  const deliveredOrders = camelOrders.filter((o: any) => o.status === "delivered");
-  const deliveredTodayOrders = todayOrders.filter((o: any) => o.status === "delivered");
+  const deliveredOrders = camelOrders.filter(
+    (o: any) => o.status === "delivered",
+  );
+  const deliveredTodayOrders = todayOrders.filter(
+    (o: any) => o.status === "delivered",
+  );
 
   const totalRevenue = deliveredOrders.reduce(
     (sum: number, o: { total?: number }) => sum + (o.total ?? 0),
@@ -106,17 +119,63 @@ export async function stats(req: Request, res: Response): Promise<void> {
     .filter((o: any) => new Date(o.createdAt) >= thirtyDaysAgo)
     .reduce((sum: number, o: any) => sum + (o.total ?? 0), 0);
   const lastMonthRevenue = deliveredOrders
-    .filter((o: any) => new Date(o.createdAt) >= sixtyDaysAgo && new Date(o.createdAt) < thirtyDaysAgo)
+    .filter(
+      (o: any) =>
+        new Date(o.createdAt) >= sixtyDaysAgo &&
+        new Date(o.createdAt) < thirtyDaysAgo,
+    )
     .reduce((sum: number, o: any) => sum + (o.total ?? 0), 0);
-  const growthRate = lastMonthRevenue === 0 
-    ? (thisMonthRevenue > 0 ? 100 : 0) 
-    : ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100;
+  const growthRate =
+    lastMonthRevenue === 0
+      ? thisMonthRevenue > 0
+        ? 100
+        : 0
+      : ((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100;
+
+  const thisMonthOrders = camelOrders.filter(
+    (o: any) => new Date(o.createdAt) >= thirtyDaysAgo,
+  ).length;
+  const lastMonthOrders = camelOrders.filter(
+    (o: any) =>
+      new Date(o.createdAt) >= sixtyDaysAgo &&
+      new Date(o.createdAt) < thirtyDaysAgo,
+  ).length;
+  const ordersGrowthRate =
+    lastMonthOrders === 0
+      ? thisMonthOrders > 0
+        ? 100
+        : 0
+      : ((thisMonthOrders - lastMonthOrders) / lastMonthOrders) * 100;
+
+  const thisMonthCustomers = new Set(
+    deliveredOrders
+      .filter((o: any) => new Date(o.createdAt) >= thirtyDaysAgo)
+      .map((o: any) => o.customerName),
+  ).size;
+  const lastMonthCustomers = new Set(
+    deliveredOrders
+      .filter(
+        (o: any) =>
+          new Date(o.createdAt) >= sixtyDaysAgo &&
+          new Date(o.createdAt) < thirtyDaysAgo,
+      )
+      .map((o: any) => o.customerName),
+  ).size;
+  const customersGrowthRate =
+    lastMonthCustomers === 0
+      ? thisMonthCustomers > 0
+        ? 100
+        : 0
+      : ((thisMonthCustomers - lastMonthCustomers) / lastMonthCustomers) * 100;
 
   const customerFirstOrderDate = new Map<string, Date>();
   for (const order of deliveredOrders) {
-    const customerName = order.customerName || 'Guest User';
+    const customerName = order.customerName || "Guest User";
     const orderDate = new Date(order.createdAt);
-    if (!customerFirstOrderDate.has(customerName) || orderDate < customerFirstOrderDate.get(customerName)!) {
+    if (
+      !customerFirstOrderDate.has(customerName) ||
+      orderDate < customerFirstOrderDate.get(customerName)!
+    ) {
       customerFirstOrderDate.set(customerName, orderDate);
     }
   }
@@ -139,19 +198,18 @@ export async function stats(req: Request, res: Response): Promise<void> {
       newCustomersThisWeek,
       avgOrderValue,
       growthRate: Math.round(growthRate * 10) / 10,
+      ordersGrowthRate: Math.round(ordersGrowthRate * 10) / 10,
+      customersGrowthRate: Math.round(customersGrowthRate * 10) / 10,
     }),
   );
 }
 
-export async function revenueChart(
-  req: Request,
-  res: Response,
-): Promise<void> {
+export async function revenueChart(req: Request, res: Response): Promise<void> {
   const merchantId = await getMerchantId(req);
-  
+
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
+
   const { data: orders, error } = await supabase
     .from("orders")
     .select("created_at, total, status")
@@ -163,10 +221,12 @@ export async function revenueChart(
     return;
   }
 
-  const camelOrders = camelCaseKeys(orders ?? []).filter((o: any) => o.status === "delivered");
-  
+  const camelOrders = camelCaseKeys(orders ?? []).filter(
+    (o: any) => o.status === "delivered",
+  );
+
   const dataMap = new Map<string, { revenue: number; orders: number }>();
-  
+
   const now = new Date();
   for (let i = 29; i >= 0; i--) {
     const d = new Date(now);
@@ -221,10 +281,7 @@ export async function listOrders(req: Request, res: Response): Promise<void> {
   res.json(GetDashboardOrdersResponse.parse(serializeDates(result)));
 }
 
-export async function listProducts(
-  req: Request,
-  res: Response,
-): Promise<void> {
+export async function listProducts(req: Request, res: Response): Promise<void> {
   const merchantId = await getMerchantId(req);
   const { data: products, error } = await supabase
     .from("products")
@@ -244,7 +301,10 @@ export async function listProducts(
   res.json(GetDashboardProductsResponse.parse(serializeDates(result)));
 }
 
-export async function createProduct(req: Request, res: Response): Promise<void> {
+export async function createProduct(
+  req: Request,
+  res: Response,
+): Promise<void> {
   const merchantId = await getMerchantId(req);
   const parsed = CreateProductBody.safeParse(req.body);
   if (!parsed.success) {
@@ -255,28 +315,43 @@ export async function createProduct(req: Request, res: Response): Promise<void> 
 
   // Validate required string fields are not empty
   if (!parsed.data.name?.trim()) {
-    res.status(400).json({ error: "Product name is required and cannot be empty" });
+    res
+      .status(400)
+      .json({ error: "Product name is required and cannot be empty" });
     return;
   }
   if (!parsed.data.description?.trim()) {
-    res.status(400).json({ error: "Product description is required and cannot be empty" });
+    res
+      .status(400)
+      .json({ error: "Product description is required and cannot be empty" });
     return;
   }
   if (!parsed.data.category?.trim()) {
-    res.status(400).json({ error: "Product category is required and cannot be empty" });
+    res
+      .status(400)
+      .json({ error: "Product category is required and cannot be empty" });
     return;
   }
-
 
   const dbData = snakeCaseKeys({
     ...parsed.data,
     name: parsed.data.name.trim(),
     description: parsed.data.description.trim(),
-    price: parsed.data.price != null ? Math.round(parsed.data.price * 100) / 100 : undefined,
-    discountPrice: parsed.data.discountPrice != null ? Math.round(parsed.data.discountPrice * 100) / 100 : undefined,
-    stock: parsed.data.stock != null ? Math.round(parsed.data.stock) : undefined,
-    preparationTime: parsed.data.preparationTime != null ? Math.round(parsed.data.preparationTime) : undefined,
-    merchantId
+    price:
+      parsed.data.price != null
+        ? Math.round(parsed.data.price * 100) / 100
+        : undefined,
+    discountPrice:
+      parsed.data.discountPrice != null
+        ? Math.round(parsed.data.discountPrice * 100) / 100
+        : undefined,
+    stock:
+      parsed.data.stock != null ? Math.round(parsed.data.stock) : undefined,
+    preparationTime:
+      parsed.data.preparationTime != null
+        ? Math.round(parsed.data.preparationTime)
+        : undefined,
+    merchantId,
   });
 
   const { data, error } = await supabase
@@ -291,18 +366,20 @@ export async function createProduct(req: Request, res: Response): Promise<void> 
       message: error.message,
       details: error.details,
       merchantId,
-      dbData
+      dbData,
     });
-    res.status(500).json({ 
+    res.status(500).json({
       error: error.message || "Failed to create product",
-      code: error.code
+      code: error.code,
     });
     return;
   }
 
   if (!data || data.length === 0) {
     console.error("No data returned from product insert");
-    res.status(500).json({ error: "Failed to create product - no data returned" });
+    res
+      .status(500)
+      .json({ error: "Failed to create product - no data returned" });
     return;
   }
 
@@ -312,7 +389,10 @@ export async function createProduct(req: Request, res: Response): Promise<void> 
     .json(serializeDates({ ...product, merchantName: "My Restaurant" }));
 }
 
-export async function updateProduct(req: Request, res: Response): Promise<void> {
+export async function updateProduct(
+  req: Request,
+  res: Response,
+): Promise<void> {
   const merchantId = await getMerchantId(req);
   const params = UpdateProductParams.safeParse(req.params);
   if (!params.success) {
@@ -328,10 +408,18 @@ export async function updateProduct(req: Request, res: Response): Promise<void> 
 
   const dbData = snakeCaseKeys({
     ...parsed.data,
-    price: parsed.data.price != null ? Math.round(parsed.data.price) : undefined,
-    discountPrice: parsed.data.discountPrice != null ? Math.round(parsed.data.discountPrice) : undefined,
-    stock: parsed.data.stock != null ? Math.round(parsed.data.stock) : undefined,
-    preparationTime: parsed.data.preparationTime != null ? Math.round(parsed.data.preparationTime) : undefined,
+    price:
+      parsed.data.price != null ? Math.round(parsed.data.price) : undefined,
+    discountPrice:
+      parsed.data.discountPrice != null
+        ? Math.round(parsed.data.discountPrice)
+        : undefined,
+    stock:
+      parsed.data.stock != null ? Math.round(parsed.data.stock) : undefined,
+    preparationTime:
+      parsed.data.preparationTime != null
+        ? Math.round(parsed.data.preparationTime)
+        : undefined,
   });
   const { data, error } = await supabase
     .from("products")
@@ -356,7 +444,10 @@ export async function updateProduct(req: Request, res: Response): Promise<void> 
   res.json(serializeDates({ ...camelProduct, merchantName: "My Restaurant" }));
 }
 
-export async function deleteProduct(req: Request, res: Response): Promise<void> {
+export async function deleteProduct(
+  req: Request,
+  res: Response,
+): Promise<void> {
   const merchantId = await getMerchantId(req);
   const params = DeleteProductParams.safeParse(req.params);
   if (!params.success) {
@@ -380,7 +471,7 @@ export async function deleteProduct(req: Request, res: Response): Promise<void> 
 
 export async function analytics(req: Request, res: Response): Promise<void> {
   const merchantId = await getMerchantId(req);
-  
+
   const { data: orders, error } = await supabase
     .from("orders")
     .select("*")
@@ -391,13 +482,16 @@ export async function analytics(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const camelOrders = camelCaseKeys(orders ?? []).filter((o: any) => o.status === "delivered");
-  
+  const camelOrders = camelCaseKeys(orders ?? []).filter(
+    (o: any) => o.status === "delivered",
+  );
+
   const customerOrderCounts = new Map<string, number>();
   let totalCustomers = 0;
   let repeatBuyers = 0;
   let newCustomers = 0;
-  
+  let newCustomersLastMonth = 0;
+
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -421,41 +515,50 @@ export async function analytics(req: Request, res: Response): Promise<void> {
 
     if (!order.createdAt) continue;
     const orderDate = new Date(order.createdAt as string);
-    if (!customerFirstOrderDate.has(customer) || orderDate < customerFirstOrderDate.get(customer)!) {
+    if (
+      !customerFirstOrderDate.has(customer) ||
+      orderDate < customerFirstOrderDate.get(customer)!
+    ) {
       customerFirstOrderDate.set(customer, orderDate);
     }
 
     const hour = orderDate.getHours();
     if (topOrderTimesMap.has(hour)) {
-        topOrderTimesMap.set(hour, topOrderTimesMap.get(hour)! + 1);
+      topOrderTimesMap.set(hour, topOrderTimesMap.get(hour)! + 1);
     }
-    
+
     const dayStr = days[orderDate.getDay()];
     if (dayStr && orderHeatmapMap.has(dayStr)) {
       const hMap = orderHeatmapMap.get(dayStr)!;
       if (hMap.has(hour)) {
-          hMap.set(hour, hMap.get(hour)! + 1);
+        hMap.set(hour, hMap.get(hour)! + 1);
       }
     }
   }
 
   totalCustomers = customerOrderCounts.size;
-  
+
   for (const [customer, count] of customerOrderCounts.entries()) {
     if (count > 1) repeatBuyers++;
     const firstOrderDate = customerFirstOrderDate.get(customer)!;
     if (firstOrderDate >= thirtyDaysAgo) {
       newCustomers++;
+    } else if (firstOrderDate >= sixtyDaysAgo && firstOrderDate < thirtyDaysAgo) {
+      newCustomersLastMonth++;
     }
   }
 
-  const repeatBuyerRate = totalCustomers > 0 ? (repeatBuyers / totalCustomers) * 100 : 0;
-  const retentionRate = totalCustomers > 0 ? Math.min(repeatBuyerRate * 1.5, 100) : 0; // naive retention based on repeat
+  const repeatBuyerRate =
+    totalCustomers > 0 ? (repeatBuyers / totalCustomers) * 100 : 0;
+  const retentionRate =
+    totalCustomers > 0 ? Math.min(repeatBuyerRate * 1.5, 100) : 0; // naive retention based on repeat
 
-  const topOrderTimes = Array.from(topOrderTimesMap.entries()).map(([hour, count]) => ({
-    hour,
-    count,
-  }));
+  const topOrderTimes = Array.from(topOrderTimesMap.entries()).map(
+    ([hour, count]) => ({
+      hour,
+      count,
+    }),
+  );
 
   const orderHeatmap: { day: string; hour: number; count: number }[] = [];
   for (const [day, hMap] of orderHeatmapMap.entries()) {
@@ -464,7 +567,9 @@ export async function analytics(req: Request, res: Response): Promise<void> {
     }
   }
 
-  const sixtyDaysAgo = new Date(thirtyDaysAgo.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const sixtyDaysAgo = new Date(
+    thirtyDaysAgo.getTime() - 30 * 24 * 60 * 60 * 1000,
+  );
   const customerCountsThisMonth = new Map<string, number>();
   const customerCountsLastMonth = new Map<string, number>();
 
@@ -474,15 +579,21 @@ export async function analytics(req: Request, res: Response): Promise<void> {
     const customer = (order.customerName as string) || "Guest User";
 
     if (orderDate >= thirtyDaysAgo) {
-      customerCountsThisMonth.set(customer, (customerCountsThisMonth.get(customer) || 0) + 1);
+      customerCountsThisMonth.set(
+        customer,
+        (customerCountsThisMonth.get(customer) || 0) + 1,
+      );
     } else if (orderDate >= sixtyDaysAgo && orderDate < thirtyDaysAgo) {
-      customerCountsLastMonth.set(customer, (customerCountsLastMonth.get(customer) || 0) + 1);
+      customerCountsLastMonth.set(
+        customer,
+        (customerCountsLastMonth.get(customer) || 0) + 1,
+      );
     }
   }
 
   let repeatBuyersThisMonth = 0;
   let repeatBuyersLastMonth = 0;
-  
+
   for (const count of customerCountsThisMonth.values()) {
     if (count > 1) repeatBuyersThisMonth++;
   }
@@ -493,12 +604,28 @@ export async function analytics(req: Request, res: Response): Promise<void> {
   const totalCustomersThisMonth = customerCountsThisMonth.size;
   const totalCustomersLastMonth = customerCountsLastMonth.size;
 
-  const repeatRateThisMonth = totalCustomersThisMonth > 0 ? (repeatBuyersThisMonth / totalCustomersThisMonth) * 100 : 0;
-  const repeatRateLastMonth = totalCustomersLastMonth > 0 ? (repeatBuyersLastMonth / totalCustomersLastMonth) * 100 : 0;
+  const repeatRateThisMonth =
+    totalCustomersThisMonth > 0
+      ? (repeatBuyersThisMonth / totalCustomersThisMonth) * 100
+      : 0;
+  const repeatRateLastMonth =
+    totalCustomersLastMonth > 0
+      ? (repeatBuyersLastMonth / totalCustomersLastMonth) * 100
+      : 0;
 
-  const retentionDelta = repeatRateLastMonth === 0 
-    ? (repeatRateThisMonth > 0 ? 100 : 0)
-    : repeatRateThisMonth - repeatRateLastMonth;
+  const retentionDelta =
+    repeatRateLastMonth === 0
+      ? repeatRateThisMonth > 0
+        ? 100
+        : 0
+      : repeatRateThisMonth - repeatRateLastMonth;
+
+  const newCustomersDelta =
+    newCustomersLastMonth === 0
+      ? newCustomers > 0
+        ? 100
+        : 0
+      : ((newCustomers - newCustomersLastMonth) / newCustomersLastMonth) * 100;
 
   // Traffic and demographics remain deterministic due to lack of source tracking in DB
   const baseOrganic = 45;
@@ -512,6 +639,7 @@ export async function analytics(req: Request, res: Response): Promise<void> {
       repeatBuyerRate: Math.round(repeatBuyerRate * 10) / 10,
       totalCustomers,
       newCustomers,
+      newCustomersDelta: Math.round(newCustomersDelta * 10) / 10,
       organicTrafficPercentage,
       socialTrafficPercentage,
       retentionDelta: Math.round(retentionDelta * 10) / 10,
@@ -529,7 +657,7 @@ export async function analytics(req: Request, res: Response): Promise<void> {
 
 export async function topProducts(req: Request, res: Response): Promise<void> {
   const merchantId = await getMerchantId(req);
-  
+
   const { data: orders, error: ordersError } = await supabase
     .from("orders")
     .select("items, status")
@@ -540,8 +668,13 @@ export async function topProducts(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const camelOrders = camelCaseKeys(orders ?? []).filter((o: any) => o.status === "delivered");
-  const productStats = new Map<number, { totalSold: number; revenue: number; name: string; image: string | null }>();
+  const camelOrders = camelCaseKeys(orders ?? []).filter(
+    (o: any) => o.status === "delivered",
+  );
+  const productStats = new Map<
+    number,
+    { totalSold: number; revenue: number; name: string; image: string | null }
+  >();
 
   for (const order of camelOrders) {
     const items = (order.items as Array<any>) || [];
@@ -551,11 +684,11 @@ export async function topProducts(req: Request, res: Response): Promise<void> {
           totalSold: 0,
           revenue: 0,
           name: item.productName || "Unknown",
-          image: item.productImage || null
+          image: item.productImage || null,
         });
       }
       const stats = productStats.get(item.productId)!;
-      stats.totalSold += (item.quantity || 1);
+      stats.totalSold += item.quantity || 1;
       stats.revenue += (item.quantity || 1) * (item.price || 0);
     }
   }
@@ -570,7 +703,7 @@ export async function topProducts(req: Request, res: Response): Promise<void> {
     }))
     .sort((a, b) => b.totalSold - a.totalSold)
     .slice(0, 5);
-    
+
   const result = sortedProducts.map((p, i) => ({ ...p, rank: i + 1 }));
 
   res.json(GetTopProductsResponse.parse(result));
@@ -703,7 +836,10 @@ const UpdateProfileSchema = z.object({
   additionalShowed: z.string().nullable().optional(),
 });
 
-export async function updateProfile(req: Request, res: Response): Promise<void> {
+export async function updateProfile(
+  req: Request,
+  res: Response,
+): Promise<void> {
   const merchantId = await getMerchantId(req);
   const parsed = UpdateProfileSchema.safeParse(req.body);
   if (!parsed.success) {
@@ -721,7 +857,9 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
 
   if (error || !data) {
     console.error("Supabase update error:", error);
-    res.status(500).json({ error: error?.message || "Failed to update profile" });
+    res
+      .status(500)
+      .json({ error: error?.message || "Failed to update profile" });
     return;
   }
 

@@ -1,6 +1,6 @@
-import { clerkClient } from '@clerk/express';
+import { clerkClient } from "@clerk/express";
 import type { Request, Response } from "express";
-import { supabase } from '../lib/supabase.js';
+import { supabase } from "../lib/supabase.js";
 import {
   GetFeedResponse,
   LikeFeedPostResponse,
@@ -9,7 +9,7 @@ import {
   LikeFeedPostParams,
   SaveFeedPostParams,
   GetFeedQueryParams,
-} from '../api-zod/index.js';
+} from "../api-zod/index.js";
 import { serializeDates, camelCaseKeys } from "../utils/serialize.js";
 import { getSessionId } from "./session.js";
 
@@ -185,29 +185,31 @@ export async function stories(_req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const result = (merchants ?? []).map((m: Record<string, unknown>, i: number) => {
-    const camelMerchant = camelCaseKeys(m) as {
-      id: number;
-      coverImage: string;
-    };
-    return {
-      id: i + 1,
-      merchantId: camelMerchant.id,
-      merchant: { ...camelMerchant, isFollowing: false },
-      image: camelMerchant.coverImage,
-      hasUnviewed: Math.random() > 0.3,
-    };
-  });
+  const result = (merchants ?? []).map(
+    (m: Record<string, unknown>, i: number) => {
+      const camelMerchant = camelCaseKeys(m) as {
+        id: number;
+        coverImage: string;
+      };
+      return {
+        id: i + 1,
+        merchantId: camelMerchant.id,
+        merchant: { ...camelMerchant, isFollowing: false },
+        image: camelMerchant.coverImage,
+        hasUnviewed: Math.random() > 0.3,
+      };
+    },
+  );
 
   res.json(GetFeedStoriesResponse.parse(serializeDates(result)));
 }
 
 export async function activeAds(req: Request, res: Response): Promise<void> {
   const { data: ads, error } = await supabase
-    .from('ads')
-    .select('*')
-    .eq('is_active', true)
-    .order('created_at', { ascending: false })
+    .from("ads")
+    .select("*")
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
     .limit(20);
 
   if (error) {
@@ -217,7 +219,7 @@ export async function activeAds(req: Request, res: Response): Promise<void> {
 
   const { data: merchants } = await supabase.from("merchants").select("*");
   const merchantMap = new Map(
-    (merchants ?? []).map((m: { id: number }) => [m.id, m])
+    (merchants ?? []).map((m: { id: number }) => [m.id, m]),
   );
 
   const result = (ads ?? []).map((ad: any) => {
@@ -232,15 +234,21 @@ export async function activeAds(req: Request, res: Response): Promise<void> {
   res.json(result);
 }
 
-
-export async function commentFeedPost(req: Request, res: Response): Promise<void> {
+export async function commentFeedPost(
+  req: Request,
+  res: Response,
+): Promise<void> {
   const params = req.params as unknown as { id: string };
   const body = req.body as { content: string };
   const sessionId = getSessionId(req);
 
   const { data, error } = await supabase
     .from("feed_comments")
-    .insert({ feed_post_id: parseInt(params.id), session_id: sessionId, content: body.content })
+    .insert({
+      feed_post_id: parseInt(params.id),
+      session_id: sessionId,
+      content: body.content,
+    })
     .select("*")
     .single();
 
@@ -249,14 +257,24 @@ export async function commentFeedPost(req: Request, res: Response): Promise<void
     return;
   }
 
-  const { data: post } = await supabase.from("feed_posts").select("comments").eq("id", params.id).single();
+  const { data: post } = await supabase
+    .from("feed_posts")
+    .select("comments")
+    .eq("id", params.id)
+    .single();
   const newComments = (post?.comments ?? 0) + 1;
-  await supabase.from("feed_posts").update({ comments: newComments }).eq("id", params.id);
+  await supabase
+    .from("feed_posts")
+    .update({ comments: newComments })
+    .eq("id", params.id);
 
   res.json(camelCaseKeys(data));
 }
 
-export async function getFeedPostComments(req: Request, res: Response): Promise<void> {
+export async function getFeedPostComments(
+  req: Request,
+  res: Response,
+): Promise<void> {
   const params = req.params as unknown as { id: string };
   const { data, error } = await supabase
     .from("feed_comments")
@@ -297,12 +315,18 @@ export async function likeFeedAd(req: Request, res: Response): Promise<void> {
     isLiked = true;
   }
 
-  const { count } = await supabase.from("ad_likes").select("*", { count: 'exact', head: true }).eq("ad_id", params.id);
+  const { count } = await supabase
+    .from("ad_likes")
+    .select("*", { count: "exact", head: true })
+    .eq("ad_id", params.id);
 
   res.json({ isLiked, likes: count ?? 0 });
 }
 
-export async function commentFeedAd(req: Request, res: Response): Promise<void> {
+export async function commentFeedAd(
+  req: Request,
+  res: Response,
+): Promise<void> {
   const params = req.params as unknown as { id: string };
   const body = req.body as { content: string };
   const sessionId = getSessionId(req);
@@ -321,7 +345,10 @@ export async function commentFeedAd(req: Request, res: Response): Promise<void> 
   res.json(camelCaseKeys(data));
 }
 
-export async function getFeedAdComments(req: Request, res: Response): Promise<void> {
+export async function getFeedAdComments(
+  req: Request,
+  res: Response,
+): Promise<void> {
   const params = req.params as unknown as { id: string };
   const { data, error } = await supabase
     .from("ad_comments")
@@ -338,32 +365,52 @@ export async function getFeedAdComments(req: Request, res: Response): Promise<vo
   res.json(enriched.map((c: any) => camelCaseKeys(c)));
 }
 
-export async function getFeedAdLikes(req: Request, res: Response): Promise<void> {
+export async function getFeedAdLikes(
+  req: Request,
+  res: Response,
+): Promise<void> {
   const params = req.params as unknown as { id: string };
   const sessionId = getSessionId(req);
-  
-  const { count } = await supabase.from("ad_likes").select("*", { count: 'exact', head: true }).eq("ad_id", params.id);
-  const { data: existing } = await supabase.from("ad_likes").select("id").eq("ad_id", params.id).eq("session_id", sessionId).limit(1);
-  
+
+  const { count } = await supabase
+    .from("ad_likes")
+    .select("*", { count: "exact", head: true })
+    .eq("ad_id", params.id);
+  const { data: existing } = await supabase
+    .from("ad_likes")
+    .select("id")
+    .eq("ad_id", params.id)
+    .eq("session_id", sessionId)
+    .limit(1);
+
   res.json({ isLiked: !!existing?.[0], likes: count ?? 0 });
 }
 
 async function enrichCommentsWithUserProfiles(comments: any[]) {
   if (!comments || comments.length === 0) return [];
-  
+
   // Extract unique session_ids
-  const userIds = [...new Set(comments.map(c => c.session_id || c.sessionId).filter(id => id && !id.includes("::") && !id.includes("anonymous")))];
-  
+  const userIds = [
+    ...new Set(
+      comments
+        .map((c) => c.session_id || c.sessionId)
+        .filter((id) => id && !id.includes("::") && !id.includes("anonymous")),
+    ),
+  ];
+
   const userMap = new Map();
   if (userIds.length > 0) {
     try {
-      const { data: users } = await clerkClient.users.getUserList({ userId: userIds, limit: 100 });
-      users.forEach(u => {
+      const { data: users } = await clerkClient.users.getUserList({
+        userId: userIds,
+        limit: 100,
+      });
+      users.forEach((u) => {
         userMap.set(u.id, {
           firstName: u.firstName,
           lastName: u.lastName,
           imageUrl: u.imageUrl,
-          username: u.username
+          username: u.username,
         });
       });
     } catch (e) {
@@ -371,14 +418,15 @@ async function enrichCommentsWithUserProfiles(comments: any[]) {
     }
   }
 
-  return comments.map(c => {
+  return comments.map((c) => {
     const sId = c.session_id || c.sessionId;
     const profile = userMap.get(sId);
-    
+
     let name = "User";
     if (profile) {
       if (profile.firstName) {
-        name = profile.firstName + (profile.lastName ? ` ${profile.lastName}` : "");
+        name =
+          profile.firstName + (profile.lastName ? ` ${profile.lastName}` : "");
       } else if (profile.username) {
         name = profile.username;
       }
@@ -392,7 +440,7 @@ async function enrichCommentsWithUserProfiles(comments: any[]) {
       user: {
         name,
         imageUrl: profile?.imageUrl || null,
-      }
+      },
     };
   });
 }

@@ -440,6 +440,7 @@ export const CreateOrderBody = zod.object({
   notes: zod.string().nullish(),
   customerName: zod.string().optional(),
   customerPhone: zod.string().optional(),
+  deliveryFee: zod.number().optional(),
 });
 
 /**
@@ -624,6 +625,8 @@ export const GetDashboardStatsResponse = zod.object({
   newCustomersThisWeek: zod.number(),
   avgOrderValue: zod.number(),
   growthRate: zod.number(),
+  ordersGrowthRate: zod.number(),
+  customersGrowthRate: zod.number(),
 });
 
 /**
@@ -772,6 +775,7 @@ export const GetCustomerAnalyticsResponse = zod.object({
   repeatBuyerRate: zod.number(),
   totalCustomers: zod.number(),
   newCustomers: zod.number(),
+  newCustomersDelta: zod.number().optional(),
   organicTrafficPercentage: zod.number().optional(),
   socialTrafficPercentage: zod.number().optional(),
   retentionDelta: zod.number().optional(),

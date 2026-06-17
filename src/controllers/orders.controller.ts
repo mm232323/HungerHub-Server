@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { getAuth } from "@clerk/express";
-import { supabase } from '../lib/supabase.js';
+import { supabase } from "../lib/supabase.js";
 import { serializeDates, camelCaseKeys } from "../utils/serialize.js";
 import {
   ListOrdersResponse,
@@ -11,7 +11,7 @@ import {
   UpdateOrderStatusParams,
   UpdateOrderStatusBody,
   ListOrdersQueryParams,
-} from '../api-zod/index.js';
+} from "../api-zod/index.js";
 
 export async function list(req: Request, res: Response): Promise<void> {
   const query = ListOrdersQueryParams.safeParse(req.query);
@@ -23,12 +23,14 @@ export async function list(req: Request, res: Response): Promise<void> {
 
   let queryBuilder = supabase
     .from("orders")
-    .select(`
+    .select(
+      `
       *,
       merchants (
         name
       )
-    `)
+    `,
+    )
     .order("created_at", { ascending: true });
 
   const auth = getAuth(req);
@@ -97,7 +99,8 @@ export async function create(req: Request, res: Response): Promise<void> {
         .from("users")
         .insert({
           clerk_id: clerkUserId,
-          username: parsed.data.customerName || ("user_" + clerkUserId.substring(0, 5)),
+          username:
+            parsed.data.customerName || "user_" + clerkUserId.substring(0, 5),
         })
         .select("id")
         .single();
@@ -140,15 +143,21 @@ export async function create(req: Request, res: Response): Promise<void> {
   });
 
   const subtotal = orderItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-  const deliveryFee = 2.99;
-  
+  const { data: merchant } = await supabase
+    .from("merchants")
+    .select("delivery_fee")
+    .eq("id", merchantId)
+    .single();
+
+  const deliveryFee = parsed.data.deliveryFee ?? merchant?.delivery_fee ?? 0;
+
   let discount = 0;
   let appliedPromotion: any = null;
   if (promoCode) {
     const { data: promotions } = await supabase
       .from("promotions")
       .select("*")
-      .eq("code", promoCode)
+      .ilike("code", promoCode)
       .eq("merchant_id", merchantId)
       .eq("is_active", true)
       .limit(1);
@@ -225,9 +234,7 @@ export async function create(req: Request, res: Response): Promise<void> {
   res
     .status(201)
     .json(
-      GetOrderResponse.parse(
-        serializeDates({ ...order, merchantName: null }),
-      ),
+      GetOrderResponse.parse(serializeDates({ ...order, merchantName: null })),
     );
 }
 
@@ -240,12 +247,14 @@ export async function getById(req: Request, res: Response): Promise<void> {
 
   const { data: orders, error } = await supabase
     .from("orders")
-    .select(`
+    .select(
+      `
       *,
       merchants (
         name
       )
-    `)
+    `,
+    )
     .eq("id", params.data.id)
     .limit(1);
 
@@ -327,9 +336,12 @@ export async function updateStatus(req: Request, res: Response): Promise<void> {
   );
 }
 
-export async function validatePromo(req: Request, res: Response): Promise<void> {
+export async function validatePromo(
+  req: Request,
+  res: Response,
+): Promise<void> {
   const { promoCode, merchantId, subtotal } = req.body;
-  
+
   if (!promoCode || !merchantId || subtotal == null) {
     res.status(400).json({ valid: false, message: "Missing required fields" });
     return;
@@ -338,14 +350,16 @@ export async function validatePromo(req: Request, res: Response): Promise<void> 
   const { data: promotions } = await supabase
     .from("promotions")
     .select("*")
-    .eq("code", promoCode)
+    .ilike("code", promoCode)
     .eq("merchant_id", merchantId)
     .eq("is_active", true)
     .limit(1);
 
   const promotion = promotions?.[0];
   if (!promotion) {
-    res.status(404).json({ valid: false, message: "Invalid or inactive promo code" });
+    res
+      .status(404)
+      .json({ valid: false, message: "Invalid or inactive promo code" });
     return;
   }
 
@@ -354,12 +368,23 @@ export async function validatePromo(req: Request, res: Response): Promise<void> 
   const endDate = new Date(promotion.end_date).getTime();
 
   if (nowTime < startDate || nowTime > endDate) {
-    res.status(400).json({ valid: false, message: "Promo code is expired or not yet active" });
+    res
+      .status(400)
+      .json({
+        valid: false,
+        message: "Promo code is expired or not yet active",
+      });
     return;
   }
 
+  const { data: merchant } = await supabase
+    .from("merchants")
+    .select("delivery_fee")
+    .eq("id", merchantId)
+    .single();
+
+  const deliveryFee = merchant?.delivery_fee ?? 0;
   let discount = 0;
-  const deliveryFee = 2.99; // Using standard delivery fee assumption
 
   if (promotion.type === "percentage") {
     discount = subtotal * (promotion.discount / 100);

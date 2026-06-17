@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { supabase } from '../lib/supabase.js';
+import { supabase } from "../lib/supabase.js";
 import { serializeDates, camelCaseKeys } from "../utils/serialize.js";
 import {
   ListMerchantsResponse,
@@ -14,18 +14,30 @@ import {
   GetMerchantReviewsParams,
   ListMerchantsQueryParams,
   CreateMerchantBody,
-} from '../api-zod/index.js';
+} from "../api-zod/index.js";
 import { getSessionId } from "./session.js";
 
 export async function create(req: Request, res: Response): Promise<void> {
   const body = CreateMerchantBody.safeParse(req.body);
   if (!body.success) {
-    require('fs').appendFileSync('error.log', new Date().toISOString() + ' Zod Error: ' + body.error.message + '\nBody: ' + JSON.stringify(req.body) + '\n');
+    require("fs").appendFileSync(
+      "error.log",
+      new Date().toISOString() +
+        " Zod Error: " +
+        body.error.message +
+        "\nBody: " +
+        JSON.stringify(req.body) +
+        "\n",
+    );
     res.status(400).json({ error: body.error.message });
     return;
   }
 
-  let baseSlug = body.data.name.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-+|-+$/g, '');
+  let baseSlug = body.data.name
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
   if (!baseSlug) baseSlug = `store-${Date.now()}`;
   const slug = `${baseSlug}-${Math.random().toString(36).substring(2, 8)}`;
 
@@ -42,7 +54,8 @@ export async function create(req: Request, res: Response): Promise<void> {
         address: body.data.address,
         country: body.data.country || "Unknown",
         is_open: body.data.isOpen ?? false,
-        profile_image: body.data.profileImage ?? "https://picsum.photos/400/400",
+        profile_image:
+          body.data.profileImage ?? "https://picsum.photos/400/400",
         cover_image: body.data.coverImage ?? "https://picsum.photos/1200/400",
         tags: body.data.tags ?? [],
         rating: 0,
@@ -55,9 +68,17 @@ export async function create(req: Request, res: Response): Promise<void> {
     .select("*");
 
   if (error) {
-    require('fs').appendFileSync('error.log', new Date().toISOString() + ' Supabase Error: ' + JSON.stringify(error) + '\n');
-    if (error.code === '23505') {
-      res.status(400).json({ error: "Duplicate constraint violated: " + error.message });
+    require("fs").appendFileSync(
+      "error.log",
+      new Date().toISOString() +
+        " Supabase Error: " +
+        JSON.stringify(error) +
+        "\n",
+    );
+    if (error.code === "23505") {
+      res
+        .status(400)
+        .json({ error: "Duplicate constraint violated: " + error.message });
       return;
     }
     console.error("Supabase insert error:", error);
@@ -72,11 +93,13 @@ export async function create(req: Request, res: Response): Promise<void> {
   }
 
   const camelMerchant = camelCaseKeys(merchant);
-  res.status(201).json(
-    GetMerchantResponse.parse(
-      serializeDates({ ...camelMerchant, isFollowing: false }),
-    ),
-  );
+  res
+    .status(201)
+    .json(
+      GetMerchantResponse.parse(
+        serializeDates({ ...camelMerchant, isFollowing: false }),
+      ),
+    );
 }
 
 export async function list(req: Request, res: Response): Promise<void> {
@@ -84,7 +107,10 @@ export async function list(req: Request, res: Response): Promise<void> {
   const category = query.success ? query.data.category : undefined;
   const trending = query.success ? query.data.trending : undefined;
   const search = query.success ? query.data.search : undefined;
-  const ownerUserName = query.success && "owner_user_name" in query.data ? query.data.owner_user_name : undefined;
+  const ownerUserName =
+    query.success && "owner_user_name" in query.data
+      ? query.data.owner_user_name
+      : undefined;
   const limit =
     query.success && query.data.limit ? Number(query.data.limit) : 20;
   const offset =
@@ -96,17 +122,24 @@ export async function list(req: Request, res: Response): Promise<void> {
   let queryBuilder;
 
   if (lat !== undefined && lng !== undefined) {
-    queryBuilder = supabase.rpc('get_nearby_merchants', { user_lat: lat, user_lng: lng, radius_km: 50, limit_count: limit });
+    queryBuilder = supabase.rpc("get_nearby_merchants", {
+      user_lat: lat,
+      user_lng: lng,
+      radius_km: 50,
+      limit_count: limit,
+    });
     if (category) queryBuilder = queryBuilder.eq("cuisine_type", category);
     if (trending) queryBuilder = queryBuilder.eq("is_trending", true);
     if (search) queryBuilder = queryBuilder.ilike("name", `%${search}%`);
-    if (ownerUserName) queryBuilder = queryBuilder.eq("owner_user_name", ownerUserName);
+    if (ownerUserName)
+      queryBuilder = queryBuilder.eq("owner_user_name", ownerUserName);
   } else {
     queryBuilder = supabase.from("merchants").select("*");
     if (category) queryBuilder = queryBuilder.eq("cuisine_type", category);
     if (trending) queryBuilder = queryBuilder.eq("is_trending", true);
     if (search) queryBuilder = queryBuilder.ilike("name", `%${search}%`);
-    if (ownerUserName) queryBuilder = queryBuilder.eq("owner_user_name", ownerUserName);
+    if (ownerUserName)
+      queryBuilder = queryBuilder.eq("owner_user_name", ownerUserName);
     queryBuilder = queryBuilder.range(offset, offset + limit - 1);
   }
 
@@ -142,8 +175,12 @@ export async function trending(req: Request, res: Response): Promise<void> {
   let merchantsQuery;
 
   if (lat !== undefined && lng !== undefined) {
-    merchantsQuery = supabase
-      .rpc('get_nearby_merchants', { user_lat: lat, user_lng: lng, radius_km: 50, limit_count: 10 });
+    merchantsQuery = supabase.rpc("get_nearby_merchants", {
+      user_lat: lat,
+      user_lng: lng,
+      radius_km: 50,
+      limit_count: 10,
+    });
   } else {
     merchantsQuery = supabase
       .from("merchants")
@@ -330,9 +367,12 @@ export async function follow(req: Request, res: Response): Promise<void> {
   let isFollowing: boolean;
   let followersCount: number;
 
-
   if (existing) {
-    const { error: delErr } = await supabase.from("merchant_follows").delete().eq("merchant_id", params.data.id).eq("session_id", sessionId);
+    const { error: delErr } = await supabase
+      .from("merchant_follows")
+      .delete()
+      .eq("merchant_id", params.data.id)
+      .eq("session_id", sessionId);
     const newCount = Math.max(0, (merchant.followers_count ?? 0) - 1);
     await supabase
       .from("merchants")

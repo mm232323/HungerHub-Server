@@ -1,12 +1,12 @@
 import type { Request, Response } from "express";
-import { supabase } from '../lib/supabase.js';
+import { supabase } from "../lib/supabase.js";
 import {
   ListProductsResponse,
   GetProductResponse,
   GetTrendingProductsResponse,
   GetProductParams,
   ListProductsQueryParams,
-} from '../api-zod/index.js';
+} from "../api-zod/index.js";
 import { serializeDates, camelCaseKeys } from "../utils/serialize.js";
 
 export async function list(req: Request, res: Response): Promise<void> {
@@ -58,13 +58,15 @@ export async function list(req: Request, res: Response): Promise<void> {
 export async function trending(_req: Request, res: Response): Promise<void> {
   const { data: products, error } = await supabase
     .from("products")
-    .select(`
+    .select(
+      `
       *,
       merchants (
         name,
         slug
       )
-    `)
+    `,
+    )
     .order("rating", { ascending: false, nullsFirst: false })
     .order("review_count", { ascending: false, nullsFirst: false })
     .limit(10);
@@ -96,13 +98,15 @@ export async function getById(req: Request, res: Response): Promise<void> {
 
   const { data: products, error } = await supabase
     .from("products")
-    .select(`
+    .select(
+      `
       *,
       merchants (
         name,
         slug
       )
-    `)
+    `,
+    )
     .eq("id", params.data.id)
     .limit(1);
 
@@ -125,7 +129,9 @@ export async function getById(req: Request, res: Response): Promise<void> {
   const { merchants: _m, ...rest } = camelProduct;
 
   res.json(
-    GetProductResponse.parse(serializeDates({ ...rest, merchantName, merchantSlug })),
+    GetProductResponse.parse(
+      serializeDates({ ...rest, merchantName, merchantSlug }),
+    ),
   );
 }
 

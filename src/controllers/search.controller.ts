@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
-import { supabase } from '../lib/supabase.js';
-import { SearchResponse, SearchQueryParams } from '../api-zod/index.js';
+import { supabase } from "../lib/supabase.js";
+import { SearchResponse, SearchQueryParams } from "../api-zod/index.js";
 import { serializeDates, camelCaseKeys } from "../utils/serialize.js";
 
 export async function search(req: Request, res: Response): Promise<void> {
@@ -27,8 +27,7 @@ export async function search(req: Request, res: Response): Promise<void> {
 
   if (merchantsResult.error || productsResult.error) {
     res.status(500).json({
-      error:
-        merchantsResult.error?.message || productsResult.error?.message,
+      error: merchantsResult.error?.message || productsResult.error?.message,
     });
     return;
   }

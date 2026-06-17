@@ -1,8 +1,10 @@
 import type { Request, Response } from "express";
-import { supabase } from '../lib/supabase.js';
+import { supabase } from "../lib/supabase.js";
 import { getAuth, createClerkClient } from "@clerk/express";
 
-const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY || "" });
+const clerkClient = createClerkClient({
+  secretKey: process.env.CLERK_SECRET_KEY || "",
+});
 
 export async function initUser(req: Request, res: Response): Promise<void> {
   const auth = getAuth(req);
@@ -19,7 +21,7 @@ export async function initUser(req: Request, res: Response): Promise<void> {
     const firstName = user.firstName || null;
     const lastName = user.lastName || null;
     const imageUrl = user.imageUrl || null;
-    const role = user.unsafeMetadata?.role as string || "customer";
+    const role = (user.unsafeMetadata?.role as string) || "customer";
 
     // Check if user already exists
     const { data: existingUser } = await supabase

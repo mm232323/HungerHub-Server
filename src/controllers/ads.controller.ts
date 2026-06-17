@@ -1,30 +1,37 @@
 import type { Request, Response } from "express";
-import { supabase } from '../lib/supabase.js';
-import { serializeDates, camelCaseKeys, snakeCaseKeys } from "../utils/serialize.js";
-import { CreateAdBody, AdResponse, UpdateAdBody } from '../api-zod/index.js';
+import { supabase } from "../lib/supabase.js";
+import {
+  serializeDates,
+  camelCaseKeys,
+  snakeCaseKeys,
+} from "../utils/serialize.js";
+import { CreateAdBody, AdResponse, UpdateAdBody } from "../api-zod/index.js";
 
 async function getMerchantId(req: Request): Promise<number> {
-  const username = req.headers['x-owner-user-name'] as string;
+  const username = req.headers["x-owner-user-name"] as string;
   if (!username) {
     throw new Error("Unauthorized: missing owner username");
   }
 
   try {
     const { data: merchants, error } = await supabase
-      .from('merchants')
-      .select('id')
-      .eq('owner_user_name', username)
+      .from("merchants")
+      .select("id")
+      .eq("owner_user_name", username)
       .limit(1);
-    
+
     const merchant = merchants?.[0];
 
     if (error || !merchant) {
       throw new Error("Not a merchant");
     }
-    
+
     return merchant.id;
   } catch (e: any) {
-    if (e.message === "Not a merchant" || e.message.startsWith("Unauthorized")) {
+    if (
+      e.message === "Not a merchant" ||
+      e.message.startsWith("Unauthorized")
+    ) {
       throw e;
     }
     throw new Error("Not a merchant");
@@ -62,7 +69,12 @@ export async function create(req: Request, res: Response): Promise<void> {
   }
 
   if (recentAds && recentAds.length >= 3) {
-    res.status(429).json({ error: "Maximum weekly budget of 3 ads reached. Please try again next week." });
+    res
+      .status(429)
+      .json({
+        error:
+          "Maximum weekly budget of 3 ads reached. Please try again next week.",
+      });
     return;
   }
 
@@ -129,10 +141,10 @@ export async function update(req: Request, res: Response): Promise<void> {
   const dbData = snakeCaseKeys(parsed.data);
 
   const { data, error } = await supabase
-    .from('ads')
+    .from("ads")
     .update(dbData)
-    .eq('id', id)
-    .eq('merchant_id', merchantId)
+    .eq("id", id)
+    .eq("merchant_id", merchantId)
     .select()
     .limit(1);
 
@@ -156,10 +168,10 @@ export async function remove(req: Request, res: Response): Promise<void> {
 
   const { id } = req.params;
   const { error } = await supabase
-    .from('ads')
+    .from("ads")
     .delete()
-    .eq('id', id)
-    .eq('merchant_id', merchantId);
+    .eq("id", id)
+    .eq("merchant_id", merchantId);
 
   if (error) {
     res.status(500).json({ error: error.message });
@@ -168,4 +180,3 @@ export async function remove(req: Request, res: Response): Promise<void> {
 
   res.status(204).send();
 }
-
